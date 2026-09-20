@@ -1,0 +1,43 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{EF3D00EF-580C-479A-890C-FD6C5B22362E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdobeDownloader.Core", "src\AdobeDownloader.Core\AdobeDownloader.Core.csproj", "{9C1B6611-7A85-410B-A155-689158774757}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdobeDownloader.Cli", "src\AdobeDownloader.Cli\AdobeDownloader.Cli.csproj", "{5FBEC615-58B1-4492-8972-2274DD6BEADF}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{84613958-4146-4CD7-8DC3-91A9B0751D9C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdobeDownloader.Core.Tests", "tests\AdobeDownloader.Core.Tests\AdobeDownloader.Core.Tests.csproj", "{B1118A1C-9DBD-4D36-B9AE-FB8262BE96FD}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9C1B6611-7A85-410B-A155-689158774757}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9C1B6611-7A85-410B-A155-689158774757}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9C1B6611-7A85-410B-A155-689158774757}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9C1B6611-7A85-410B-A155-689158774757}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5FBEC615-58B1-4492-8972-2274DD6BEADF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5FBEC615-58B1-4492-8972-2274DD6BEADF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5FBEC615-58B1-4492-8972-2274DD6BEADF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5FBEC615-58B1-4492-8972-2274DD6BEADF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B1118A1C-9DBD-4D36-B9AE-FB8262BE96FD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B1118A1C-9DBD-4D36-B9AE-FB8262BE96FD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B1118A1C-9DBD-4D36-B9AE-FB8262BE96FD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B1118A1C-9DBD-4D36-B9AE-FB8262BE96FD}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{9C1B6611-7A85-410B-A155-689158774757} = {EF3D00EF-580C-479A-890C-FD6C5B22362E}
+		{5FBEC615-58B1-4492-8972-2274DD6BEADF} = {EF3D00EF-580C-479A-890C-FD6C5B22362E}
+		{B1118A1C-9DBD-4D36-B9AE-FB8262BE96FD} = {84613958-4146-4CD7-8DC3-91A9B0751D9C}
+	EndGlobalSection
+EndGlobal

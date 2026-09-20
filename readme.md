@@ -1,74 +1,56 @@
-# Adobe Downloader
+# Flash Creative
 
-![Adobe-Downloader-3.0.0](imgs/Adobe-Downloader-3.0.0.png)
+A Windows port of [X1a0He's Adobe Downloader](https://github.com/X1a0He/Adobe-Downloader),
+working toward a lightweight way to download and install official Adobe application
+packages without the Creative Cloud desktop installer.
 
-> Adobe Downloader 中的所有 Adobe 应用均来自 Adobe 官方渠道，并非破解版本。
+**Early development: downloads work; Windows installation is not implemented yet.**
+Adobe sign-in, subscriptions, and application licensing requirements still apply.
+Flash Creative is an independent project and is not affiliated with Adobe.
 
-<a href="https://star-history.com/#X1a0He/Adobe-Downloader&Timeline">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=X1a0He/Adobe-Downloader&type=Timeline&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=X1a0He/Adobe-Downloader&type=Timeline" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=X1a0He/Adobe-Downloader&type=Timeline" />
- </picture>
-</a>
+## Credit and provenance
 
-# **[English version](readme-en.md)**
+The original **Adobe Downloader** was created by **X1a0He** for macOS. Flash Creative
+builds on that project's architecture, Adobe metadata handling, and installation
+research. This repository preserves its source, attribution, and Git history, starting
+from upstream commit `36ebd80` (release 3.1.0).
 
-## 使用须知
+- Original project: **https://github.com/X1a0He/Adobe-Downloader**
+- Original author: [X1a0He](https://github.com/X1a0He)
+- Original documentation: [English](readme-en.md) · [中文](readme-upstream-zh.md)
+- License: [GNU GPL version 3](LICENSE). Existing upstream and bundled third-party
+  copyright/license notices are retained.
 
-**⚠️仅支持 macOS 13.0+**
+## Current Windows features
 
-> **如果你也喜欢 Adobe Downloader, 或者对你有帮助, 请 Star 仓库吧 🌟, 你的支持是我更新的动力**
+- Query Adobe's official Windows product catalog.
+- Inspect exact versions, language sets, dependencies, and package manifests.
+- Download an explicitly selected package from Adobe HTTPS servers.
+- Check download size and optionally a supplied SHA-256 digest.
+- Keep incomplete files separate from completed downloads.
 
-## 📔 最新日志
+The Windows implementation is C#/.NET, under [`windows/`](windows/).
+The original Swift/macOS application remains in the repository as the porting reference.
 
-### 2026-06-22 v3.1.0 更新日志
+## Build and try it
 
-- fix: 修复了在下载 Adobe 产品的过程中，出现内存占用过大的问题
-- fix: 修复了在部分 Adobe 产品安装过程中，出现错误的问题
-- fix: 修复了在部分 Adobe 产品安装完成后，因权限而无法启动 App 的问题
-- feat: 优化了安装 Sheet 的显示，避免在屏幕太小的时候无法点击到最底部的按钮
-- feat: 为取消安装增加回滚
-- feat: 同步 Adobe Creative Cloud 官方安装行为，在安装后添加卸载快捷方式
-- feat: 引入了增量更新功能，在 3.1.0 版本中可以实现对已有产品的增量更新(必需使用 Adobe Downloader 下载)
-- feat: 优化了部分产品的版本选择页面
+Requires a .NET 8 SDK/runtime or a compatible development environment.
 
-### 语言支持
+```powershell
+dotnet build windows/AdobeDownloader.Windows.sln -c Release
+dotnet test windows/AdobeDownloader.Windows.sln -c Release
+dotnet run --project windows/src/AdobeDownloader.Cli -c Release -- --help
+dotnet run --project windows/src/AdobeDownloader.Cli -c Release -- catalog --product KBRG
+```
 
-- [x] 中文
-- [x] English
+See the [Windows usage guide](windows/README.md) and [validation evidence](docs/PHASE-1-VALIDATION.md).
 
-## ⚠️ 注意
+## Roadmap
 
-**如果你对 Adobe Downloader 有任何优化建议或疑问，请提出 issue 或通过 Telegram 联系 [@X1a0He](https://t.me/X1a0He_bot)**
+1. Windows catalog, metadata, and single-package download foundation — complete.
+2. Dependency resolution, complete download plans, resumable transfers, and persistent queues.
+3. Windows installation, elevation, application registration, and rollback.
+4. Native desktop interface.
+5. Clean-machine validation, release packaging, and documentation.
 
-## ✨ 特点
-
-- [x] 基本功能 📦
-    - [x] 所有 Adobe App 的下载/安装
-    - [x] 支持多个产品同时下载
-    - [x] 支持使用默认语言和默认目录
-    - [x] 支持任务记录持久化
-- [x] 安装功能 📦
-- [x] 清理功能 🧹 (1.5.0新增)
-    - [x] Adobe 应用程序
-    - [x] Adobe Creative Cloud
-    - [x] Adobe 偏好设置
-    - [x] Adobe 缓存文件
-    - [x] Adobe 许可文件
-    - [x] Adobe 日志文件
-    - [x] Adobe 服务
-    - [x] Adobe 钥匙串
-    - [x] Adobe 正版验证服务
-    - [x] Adobe Hosts
-
-## 👀 预览
-
-## 👨🏻‍💻作者
-
-Adobe Downloader © X1a0He
-
-Released under GPLv3. Created on 2024.11.05.
-
-> GitHub [@X1a0He](https://github.com/X1a0He/) \
-> Telegram [@X1a0He](https://t.me/X1a0He_bot)
+Details: [Windows port plan](docs/WINDOWS-PORT-PLAN.md).

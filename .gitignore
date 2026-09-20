@@ -45,3 +45,15 @@ playground.xcworkspace
 
 # Swift Package Manager
 .build/
+
+# Windows build outputs and local downloads
+**/bin/
+**/obj/
+.local/
+.vs/
+TestResults/
+
+# Graphify generated data (kept locally, reproducible from source)
+graphify-out/
+.graphify_cache/
+.codex/hooks.json
