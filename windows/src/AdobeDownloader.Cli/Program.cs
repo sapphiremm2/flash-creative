@@ -16,6 +16,8 @@ static async Task<int> RunAsync(string[] args)
                      [--max-mib 100] [--sha256 EXPECTED] [--platform win64] [--channel sti]
             plan --product CODE --version EXACT --out plan.json [--locale en_US] [--os-version 10.0.22000]
                  [--platform win64] [--channel ccm] [--modules ID,SAP:ID] [--features NAME,SAP:NAME]
+                 [--deployment individual|enterprise]
+            inspect-delta --plan plan.json --product CODE --package NAME --base-version EXACT [--archive delta.zip] [--out report.json]
             queue-create --plan plan.json --out QUEUE_DIRECTORY
             queue-run --queue QUEUE_DIRECTORY [--max-mib 100]
             queue-status --queue QUEUE_DIRECTORY
@@ -38,9 +40,10 @@ static async Task<int> RunAsync(string[] args)
     try
     {
         var command = args[0];
-        if (command is not ("catalog" or "manifest" or "download" or "plan" or "queue-create" or "queue-run" or "queue-status" or "verify-signature"))
+        if (command is not ("catalog" or "manifest" or "download" or "plan" or "queue-create" or "queue-run" or "queue-status" or "verify-signature" or "inspect-delta"))
             throw new ArgumentException("Unknown command; use --help.");
         var options = ParseOptions(args[1..]);
+        if (command == "inspect-delta") return await InspectDeltaCommandAsync(options, cancellation.Token);
         if (command == "verify-signature")
         {
             if (options.Count != 2 || !options.ContainsKey("file") || !options.ContainsKey("publisher"))
@@ -53,12 +56,14 @@ static async Task<int> RunAsync(string[] args)
         {
             "catalog" => new[] { "product", "platform", "channel", "json" },
             "manifest" => ["product", "version", "platform", "channel", "locale", "out"],
-            "plan" => ["product", "version", "platform", "channel", "locale", "os-version", "out", "modules", "features"],
+            "plan" => ["product", "version", "platform", "channel", "locale", "os-version", "out", "modules", "features", "deployment"],
             _ => ["product", "version", "platform", "channel", "locale", "out", "package", "max-mib", "sha256"]
         };
         if (options.Keys.Any(key => !allowed.Contains(key))) throw new ArgumentException("Option is not valid for this command; use --help.");
         string Get(string name, string fallback) => options.GetValueOrDefault(name) ?? fallback;
         string Require(string name) => options.GetValueOrDefault(name) ?? throw new ArgumentException($"--{name} is required.");
+        var deployment = Get("deployment", "individual");
+        if (deployment is not ("individual" or "enterprise")) throw new ArgumentException("--deployment must be individual or enterprise.");
         var platform = Get("platform", "win64");
         var channel = Get("channel", "ccm");
         if (channel is not ("ccm" or "sti" or "nocc")) throw new ArgumentException("Channel must be ccm, sti, or nocc.");
@@ -99,14 +104,14 @@ static async Task<int> RunAsync(string[] args)
             var planner = new DownloadPlanner(new ManifestClient(transport).FetchAsync);
             var plan = await planner.CreateAsync(matches[0], catalog, locale,
                 Get("os-version", Environment.OSVersion.Version.ToString()), cancellation.Token,
-                new SelectionOptions(options.GetValueOrDefault("modules")?.Split(','), options.GetValueOrDefault("features")?.Split(',')));
+                new SelectionOptions(options.GetValueOrDefault("modules")?.Split(','), options.GetValueOrDefault("features")?.Split(','), deployment == "enterprise"));
             plan = plan with { RequiresAdobeValidation = true };
             DownloadQueue.Validate(plan);
             await JsonFiles.WriteAsync(output, plan, overwrite: false, ct: cancellation.Token);
             Console.WriteLine(JsonSerializer.Serialize(new
             {
                 Path = Path.GetFullPath(output), Products = plan.Products.Select(x => new { x.Build.SapCode, x.Build.ProductVersion, x.Build.Platform }),
-                Packages = plan.Downloads.Count, plan.TotalBytes,
+                Packages = plan.Downloads.Count, plan.TotalBytes, plan.IsEnterpriseDeployment,
                 Note = "Full packages; delta fallback reasons are saved. Queue downloads require Adobe HTTPS SHA-256 segment verification. No installation or detached Adobe signature verification."
             }, JsonFiles.Options));
             return 0;
@@ -144,6 +149,20 @@ static async Task<int> RunAsync(string[] args)
         return 1;
     }
     finally { Console.CancelKeyPress -= cancel; }
+}
+
+static async Task<int> InspectDeltaCommandAsync(Dictionary<string, string> options, CancellationToken ct)
+{
+    string Require(string name) => options.GetValueOrDefault(name) ?? throw new ArgumentException($"--{name} is required.");
+    string[] allowed = ["plan", "product", "package", "base-version", "archive", "out"];
+    if (options.Keys.Any(k => !allowed.Contains(k))) throw new ArgumentException("Invalid inspect-delta option; use --help.");
+    var plan = await JsonFiles.ReadAsync<DownloadPlan>(Require("plan"), ct);
+    using var http = AdobeTransport.CreateHttpClient();
+    var report = await new DeltaInspector(new AdobeTransport(http)).InspectAsync(plan,
+        Require("product"), Require("package"), Require("base-version"), ct, options.GetValueOrDefault("archive"));
+    if (options.TryGetValue("out", out var output)) await JsonFiles.WriteAsync(output, report, overwrite: false, ct: ct);
+    Console.WriteLine(JsonSerializer.Serialize(report, JsonFiles.Options));
+    return 0;
 }
 
 static async Task<int> QueueCommandAsync(string command, Dictionary<string, string> options, CancellationToken ct)

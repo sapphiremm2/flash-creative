@@ -1,4 +1,4 @@
-# Phase two â€” first milestone, 2026-09-20
+# Phase two: download planning and validation, 2026-09-21
 
 Status: **in progress**, with a working plan â†’ persistent queue â†’ resumable download path.
 
@@ -19,7 +19,7 @@ Status: **in progress**, with a working plan â†’ persistent queue â†’ 
   Missing/weak validators restart; a 200 response to a range request restarts; invalid
   range/ETag responses fail without publishing corrupt output. Retries are bounded.
 
-Release build: **zero warnings and errors**. Automated suite: **107 passing tests**.
+Release build: **zero warnings and errors**. Automated suite: **126 passing tests**.
 The suite includes connection loss, persisted cancellation/restart, changed validators,
 missing validators, ignored ranges, invalid content ranges, 416 recovery, completed-file
 tampering, queue locks/budgets, dependency graphs, condition parsing, and ARM64 selection.
@@ -97,13 +97,66 @@ their product platform and payload paths are `winarm64`. The planner treats this
 as bitness only in a matching native manifest. Shared win32 manifests do not grant ARM
 compatibility to 64-bit payloads, and explicit `x64` families remain excluded on ARM.
 
+## Broader x64 compatibility and delta inspection
+
+The default target is Intel/AMD x64 (`win64`); ARM64 is additional coverage. The local
+CLI and GitHub Windows tests run on x64. No ARM hardware execution is claimed.
+
+Additional metadata-only plans, win64 / en_US / OS 10.0.26100 / individual deployment:
+
+| Product code | Product version | Products | Packages | Bytes |
+| --- | --- | ---: | ---: | ---: |
+| ILST (Illustrator) | 30.8.1.1 | 8 | 28 | 2,311,611,322 |
+| IDSN (InDesign) | 21.6.0.057 | 7 | 25 | 1,146,271,172 |
+| PPRO (Premiere Pro) | 26.5.1.1 | 4 | 14 | 2,552,580,061 |
+| AME (Media Encoder) | 26.5.0.85 | 2 | 2 | 1,688,912,702 |
+| AUDT (Audition) | 26.5.0.82 | 2 | 2 | 567,105,313 |
+| LRCC (Lightroom) | 9.5.202607280500 | 1 | 1 | 2,518,538,561 |
+| LTRM (Lightroom Classic) | 15.5.1.202608131348 | 1 | 1 | 2,738,839,025 |
+| DRWV (Dreamweaver) | 21.8.1.15907 | 1 | 2 | 472,852,103 |
+| CHAR (Character Animator) | 26.0.0.50 | 2 | 2 | 1,483,823,819 |
+| SBSTA (Substance 3D Sampler) | 6.0.3.10557 | 1 | 1 | 810,728,980 |
+| SBSTD (Substance 3D Designer) | 16.0.6.11611 | 1 | 1 | 611,886,739 |
+| SBSTP (Substance 3D Painter) | 12.1.5.5783 | 1 | 2 | 2,543,461,803 |
+
+Lightroom Classic exposed `[IsEnterpriseDeployment]==true`. The planner now supports
+this explicit input, defaulting to individual. With `--deployment enterprise`, its
+ModelZoo package is added: two packages, **3,058,993,954 bytes**. Both CLI variants were
+verified; no application payload was downloaded. Plans/results: `.local/coverage-*` and
+`.local/lightroom-classic-{individual,enterprise}.json`.
+
+`inspect-delta` now fetches and validates bounded diff metadata and explicit SHA-256
+segment metadata. Optional local archive checks validate all bytes and require the
+embedded diff JSON to match the fetched JSON. Tests cover traversal, alternate data
+streams, reserved paths, duplicate properties/entries, unsupported actions, corrupted
+archive bytes, and mismatched embedded metadata. Inspection never marks an installed
+baseline verified and never applies a patch or changes the saved full-package plan.
+
+The earlier Bridge metadata HTTP 403 did **not** recur. Live inspection succeeded:
+
+| Product | Base to target package version | Instructions | Patch actions | Delta bytes | Segments |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Bridge | 16.0.6.9 to 16.0.7.36 | 3,317 | 375 | 15,708,287 | 8 |
+| Photoshop core | 27.9.1.1 to 27.10.0.26 | 10,922 | 581 | 50,501,864 | 25 |
+| Premiere Pro | 26.5.0.99 to 26.5.1.1 | 21,234 | 915 | 226,008,823 | 108 |
+
+Only the **Bridge delta archive** was downloaded, with all eight segments verified.
+SHA-256: `2b6c2663dd26dc8a61a087293d24ad84212c000aebb56395668a746f4097642d`.
+Its embedded diff JSON exactly matches the separately fetched metadata. Its ACE.dll
+patch has a `BSDIFF40` header. This does not establish the old installed DLL's identity.
+Metadata: `.local/*-delta-inspection.json`; archive evidence: `.local/bridge-delta/` and
+`.local/bridge-delta-verified-inspection.json`. No patch or installer was executed.
+
+Delta validation responses omit `packageHashKey`; parsing permits omission only when
+no expected key was supplied. Full-package validation still rejects missing/mismatched
+keys when the selected manifest supplied one.
+
 ## Remaining phase-two work and dependencies
 
 - **Delta execution is unavailable.** Safe selection needs a verified installed baseline
-  and patch engine, both dependent on phase-three installation support. A Bridge delta
-  diff-metadata request returned HTTP 403. The planner records candidates and chooses
-  the full package; it does not bypass the failed endpoint or accept a claimed version
-  as baseline proof.
+  and patch engine, both dependent on phase-three installation support. Delta metadata and archive
+  verification now work, but the planner still chooses full packages and never accepts
+  a claimed installed version as proof of the old files.
 - **Detached Adobe signatures remain unverified.** The opaque `PackageValidation` field
   has no established trusted public key here. HTTPS segment checks and Windows embedded
   signatures are separate evidence and are not described as verifying this field.

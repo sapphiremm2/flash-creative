@@ -5,6 +5,14 @@ dependency planning and persistent resumable queues. This does **not** install
 applications yet. See the phase-two limitations below before relying on a plan.
 The upstream macOS application is preserved. The port remains under the repository's GPLv3 license.
 
+## Supported machine targets
+
+The default `win64` target is for ordinary **64-bit Intel and AMD Windows PCs**. The
+CLI is built and tested on x64. `--platform winarm64` builds download plans from Adobe's
+ARM catalog; it is additional coverage, not a requirement for using Flash Creative.
+ARM hardware execution and installation remain untested. The CLI still does not install
+applications on either architecture.
+
 ## Build and test
 
 Requires .NET SDK 8.0 or compatible newer SDK with .NET 8 targeting/runtime support.
@@ -129,12 +137,42 @@ dotnet run --project $cli -c Release --no-build -- plan --product AEFT --version
 records the user's selection; the CLI never infers consent from a default. Unknown IDs,
 missing references, and selected modules with no compatible packages fail planning.
 
+## Individual and enterprise deployments
+
+`plan` defaults to `--deployment individual`. Use `--deployment enterprise` only when
+preparing that deployment type. The choice is saved as `IsEnterpriseDeployment` and
+controls Adobe package conditions; it does not change licensing or grant an entitlement.
+Lightroom Classic, for example, adds its ModelZoo package for enterprise deployments.
+
+## Inspect delta metadata and archives
+
+Regenerate a plan with the current CLI to retain its delta candidates, then select a
+package and exact base package version from that plan:
+
+```powershell
+dotnet run --project $cli -c Release --no-build -- inspect-delta --plan bridge-plan.json --product KBRG --package AdobeBridge16.0-mul-x64 --base-version 16.0.6.9 --out delta-report.json
+# If you already have the corresponding delta ZIP, add --archive path/to/delta.zip.
+```
+
+Inspection fetches Adobe's diff JSON and SHA-256 segment metadata, reports operation
+counts, symbolic destination directories, extra fields, and full/delta sizes. It rejects
+unsupported operations, duplicate properties, and unsafe relative paths. An optional
+`--archive` is checked against Adobe's segments, then its embedded `<PackageName>_diff.json`
+must exactly match the fetched metadata. Only that bounded metadata entry is decompressed
+in memory; no payload is extracted or executed. Reports are written without overwriting.
+
+`PayloadVerification` is null for metadata-only inspection. Even with a verified archive,
+`InstalledBaselineVerified` and `CanApply` remain false: selecting a base version does
+not prove the installed files match it. The command never converts a full-package plan
+to a delta plan. Unknown extra fields are reported for installation research, not applied.
+
 ## Current limits
 
 Phase two remains **in progress**. Plans use full packages and retain delta candidates
 with an explicit fallback reason. Safe delta use requires a verified installed baseline
-and supported patch operations, which depend on phase-three installation work. A live
-Bridge delta metadata request also returned HTTP 403; there is no bypass or guessed metadata.
+and supported patch operations, which depend on phase-three installation work. The earlier
+Bridge HTTP 403 did not recur: Bridge, Photoshop, and Premiere Pro delta metadata were
+successfully inspected on 2026-09-21.
 
 Live metadata planning covers Bridge, Photoshop, and After Effects on x64 and Photoshop
 and After Effects on ARM64. Native `winarm64` manifests use `64-bit` to describe bitness,

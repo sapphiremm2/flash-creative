@@ -137,6 +137,18 @@ public class PlannerTests
         await Assert.ThrowsAsync<InvalidDataException>(() => planner.CreateAsync(root, [root], "en_US", "10.0", options: new(["Addon"])));
     }
 
+    [Theory] [InlineData(false, 1)] [InlineData(true, 2)]
+    public async Task EnterpriseOnlyPackageRequiresExplicitDeploymentSelection(bool enterprise, int count)
+    {
+        var root = Build("LTRM");
+        var plan = await Planner(b => Manifest(b, [Package("main"), Package("model-zoo", "[IsEnterpriseDeployment]==true")]))
+            .CreateAsync(root, [root], "en_US", "10.0", options: new(IsEnterpriseDeployment: enterprise));
+        Assert.Equal(count, plan.Downloads.Count);
+        Assert.Equal(enterprise, plan.IsEnterpriseDeployment);
+        var json = System.Text.Json.JsonSerializer.Serialize(plan, JsonFiles.Options);
+        Assert.Equal(enterprise, System.Text.Json.JsonSerializer.Deserialize<DownloadPlan>(json, JsonFiles.Options)!.IsEnterpriseDeployment);
+    }
+
     [Fact] public async Task WrongLocaleFails()
     {
         var root = Build("APP");

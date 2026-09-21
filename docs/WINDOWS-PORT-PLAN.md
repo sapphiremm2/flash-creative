@@ -56,7 +56,9 @@ discovered channels and shared win32 catalog entries, strict package conditions,
 saved plans, persistent queues, validated ETag resume, retries, disk preflight, and
 completion receipts, explicit modules/features, dependency backtracking, Adobe HTTPS
 SHA-256 segment validation, and Windows embedded-signature verification. Live x64/ARM64
-metadata plans pass. Delta candidates fall back to full packages until a trusted installed
+metadata plans pass. Individual/enterprise conditions and read-only delta metadata/archive
+inspection are supported. Fifteen representative x64 products have live metadata plans.
+Delta candidates fall back to full packages until a trusted installed
 baseline and patch engine exist; detached Adobe signatures and ARM hardware validation
 remain open. See `PHASE-2-VALIDATION.md` for evidence and remaining work.
 

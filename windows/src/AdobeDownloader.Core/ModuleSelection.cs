@@ -1,6 +1,6 @@
 namespace AdobeDownloader.Core;
 
-public sealed record SelectionOptions(IReadOnlyList<string>? Modules = null, IReadOnlyList<string>? Features = null);
+public sealed record SelectionOptions(IReadOnlyList<string>? Modules = null, IReadOnlyList<string>? Features = null, bool IsEnterpriseDeployment = false);
 
 public static class ModuleSelection
 {

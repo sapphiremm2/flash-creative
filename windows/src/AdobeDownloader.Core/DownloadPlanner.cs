@@ -5,7 +5,7 @@ public sealed record PackageDecision(string Package, bool Included, string Reaso
 public sealed record PlannedProduct(ProductBuild Build, ApplicationManifest Manifest, IReadOnlyList<PackageDecision> Decisions);
 public sealed record PlannedDownload(string DirectoryName, string SapCode, string ProductVersion, PackageAsset Package);
 public sealed record DownloadPlan(int SchemaVersion, DateTimeOffset CreatedAt, string Platform, string Locale,
-    string OsVersion, IReadOnlyList<PlannedProduct> Products, IReadOnlyList<PlannedDownload> Downloads, bool RequiresAdobeValidation = false)
+    string OsVersion, IReadOnlyList<PlannedProduct> Products, IReadOnlyList<PlannedDownload> Downloads, bool RequiresAdobeValidation = false, bool IsEnterpriseDeployment = false)
 {
     public long TotalBytes => Downloads.Aggregate(0L, (total, item) => checked(total + item.Package.DownloadSize));
 }
@@ -67,7 +67,8 @@ public sealed class DownloadPlanner(Func<ProductBuild, CancellationToken, Task<A
         var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["OSProcessorFamily"] = root.Platform switch { "win64" or "winarm64" => "64-bit", _ => "32-bit" },
-            ["OSVersion"] = osVersion, ["InstallLanguage"] = locale
+            ["OSVersion"] = osVersion, ["InstallLanguage"] = locale,
+            ["IsEnterpriseDeployment"] = options.IsEnterpriseDeployment ? "true" : "false"
         };
 
         async Task Visit(ProductBuild build)
@@ -109,7 +110,7 @@ public sealed class DownloadPlanner(Func<ProductBuild, CancellationToken, Task<A
         await Visit(root);
         var unused = (options.Modules ?? []).Concat(options.Features ?? []).Where(x => !usedSelections.Contains(x)).ToArray();
         if (unused.Length > 0) throw new InvalidDataException("Selections reference products outside this plan: " + string.Join(", ", unused));
-        var plan = new DownloadPlan(1, DateTimeOffset.UtcNow, root.Platform, locale, osVersion, ordered, downloads);
+        var plan = new DownloadPlan(1, DateTimeOffset.UtcNow, root.Platform, locale, osVersion, ordered, downloads, IsEnterpriseDeployment: options.IsEnterpriseDeployment);
         _ = plan.TotalBytes;
         return plan;
     }

@@ -41,7 +41,11 @@ public sealed class AdobePackageVerifier(AdobeTransport transport)
         var size = Number("segmentSize"); var last = Number("lastSegmentSize"); var count = Number("segmentCount");
         if (count > 100000 || last > size || checked((count - 1) * size + last) != expectedSize)
             throw new InvalidDataException("Validation metadata does not cover the exact package size.");
-        if (expectedKey.Length > 0 && !Text("packageHashKey").Equals(expectedKey, StringComparison.OrdinalIgnoreCase))
+        var keyElements = root.Elements("packageHashKey").ToArray();
+        if (keyElements.Length > 1) throw new InvalidDataException("Duplicate validation packageHashKey.");
+        var key = keyElements.SingleOrDefault()?.Value.Trim() ?? "";
+        // Delta validation responses omit this field. A supplied manifest key remains mandatory.
+        if (expectedKey.Length > 0 && !key.Equals(expectedKey, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Validation packageHashKey differs from the selected manifest.");
         if (root.Elements("segments").Count() != 1) throw new InvalidDataException("Missing or duplicate validation segments.");
         var nodes = root.Element("segments")?.Elements("segment").ToArray() ?? [];
@@ -53,7 +57,7 @@ public sealed class AdobePackageVerifier(AdobeTransport transport)
                 !Regex.IsMatch(node.Value.Trim(), "^[a-fA-F0-9]{64}$")) throw new InvalidDataException("Invalid or duplicate validation segment.");
             hashes[number - 1] = node.Value.Trim();
         }
-        return new SegmentValidation(size, last, Text("packageHashKey"), hashes);
+        return new SegmentValidation(size, last, key, hashes);
     }
 
     public static async Task VerifySegmentsAsync(string path, SegmentValidation info, CancellationToken ct = default)
