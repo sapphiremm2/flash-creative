@@ -34,13 +34,14 @@ public sealed class ManifestClient(AdobeTransport transport)
             if (!long.TryParse(Text(package, "DownloadSize"), NumberStyles.None, CultureInfo.InvariantCulture, out var size) || size <= 0)
                 throw new InvalidDataException($"Package {name} has no valid download size.");
             packages.Add(new PackageAsset(name, fileName, Text(package, "Type"),
-                Text(package, "ProcessorFamily"), Text(package, "Condition"), size, url, Text(package, "packageHashKey")));
+                Text(package, "ProcessorFamily"), Text(package, "Condition"), size, url, Text(package, "packageHashKey"),
+                Items(package, "Features", "Feature").Select(x => x.ToString()).ToArray(), Text(package, "ValidationURL")));
         }
         if (packages.Count == 0) throw new InvalidDataException("Adobe manifest contains no downloadable packages.");
         if (packages.Select(p => p.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != packages.Count)
             throw new InvalidDataException("Adobe manifest has ambiguous duplicate package names.");
         var dependencies = Items(root, "Dependencies", "Dependency")
-            .Select(x => new Dependency(Required(x, "SAPCode"), Text(x, "BaseVersion"))).ToArray();
+            .Select(x => new Dependency(Required(x, "SAPCode"), Text(x, "BaseVersion"), Text(x, "ProductVersion"), Text(x, "BuildGuid"))).ToArray();
         return new ApplicationManifest(build.SapCode, build.ProductVersion, build.Platform, packages, dependencies, json);
     }
 

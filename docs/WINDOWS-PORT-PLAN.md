@@ -51,6 +51,11 @@ them SHA-256 just because they are hexadecimal.
 
 ## Phase 2 — Complete download sets
 
+Status: **in progress**. First milestone implemented: dependency planning across
+discovered channels and shared win32 catalog entries, strict package conditions,
+saved plans, persistent queues, validated ETag resume, retries, disk preflight, and
+completion receipts. See `PHASE-2-VALIDATION.md` for evidence and remaining work.
+
 Resolve transitive dependencies across catalog channels, compatible versions and
 architectures, package conditions, language resources, optional modules, and full versus
 delta payloads. Persist queues and implement resume with Range/ETag validation, retries,

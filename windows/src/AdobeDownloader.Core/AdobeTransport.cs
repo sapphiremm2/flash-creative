@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Net.Http.Headers;
 
 namespace AdobeDownloader.Core;
 
@@ -14,7 +15,7 @@ public sealed class AdobeTransport(HttpClient client)
 
     public static Uri ValidateUrl(Uri uri)
     {
-        if (!uri.IsAbsoluteUri || uri.Scheme != Uri.UriSchemeHttps || !uri.IsDefaultPort ||
+        if (uri is null || !uri.IsAbsoluteUri || uri.Scheme != Uri.UriSchemeHttps || !uri.IsDefaultPort ||
             !string.IsNullOrEmpty(uri.UserInfo) ||
             !(uri.IdnHost.Equals("adobe.com", StringComparison.OrdinalIgnoreCase) ||
               uri.IdnHost.EndsWith(".adobe.com", StringComparison.OrdinalIgnoreCase)))
@@ -22,8 +23,11 @@ public sealed class AdobeTransport(HttpClient client)
         return uri;
     }
 
-    public async Task<HttpResponseMessage> GetAsync(Uri uri, string? buildGuid, CancellationToken ct)
+    public async Task<HttpResponseMessage> GetAsync(Uri uri, string? buildGuid, CancellationToken ct,
+        long? rangeStart = null, string? entityTag = null)
     {
+        if (rangeStart is not null && (rangeStart <= 0 || !EntityTagHeaderValue.TryParse(entityTag, out var validator) || validator.IsWeak || validator.Tag == "*"))
+            throw new ArgumentException("Resume requires a positive offset and a strong entity tag.");
         for (var redirects = 0; redirects <= 5; redirects++)
         {
             ValidateUrl(uri);
@@ -33,6 +37,11 @@ public sealed class AdobeTransport(HttpClient client)
             request.Headers.TryAddWithoutValidation("x-api-key", "Creative Cloud_v6_4");
             request.Headers.Add("x-adobe-app-version", "6.8.1.856");
             if (!string.IsNullOrWhiteSpace(buildGuid)) request.Headers.Add("x-adobe-build-guid", buildGuid);
+            if (rangeStart is not null)
+            {
+                request.Headers.Range = new RangeHeaderValue(rangeStart, null);
+                request.Headers.IfRange = new RangeConditionHeaderValue(EntityTagHeaderValue.Parse(entityTag!));
+            }
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TimeSpan.FromSeconds(90));
             var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
@@ -45,7 +54,7 @@ public sealed class AdobeTransport(HttpClient client)
                 uri = new Uri(uri, location);
                 continue;
             }
-            if (response.StatusCode != HttpStatusCode.OK)
+            if (response.StatusCode != HttpStatusCode.OK && !(rangeStart is not null && response.StatusCode == HttpStatusCode.PartialContent))
             {
                 var status = response.StatusCode;
                 response.Dispose();

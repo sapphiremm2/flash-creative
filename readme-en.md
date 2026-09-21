@@ -12,7 +12,7 @@
  </picture>
 </a>
 
-# **[中文版本](readme.md)**
+# **[中文版本](readme-upstream-zh.md)**
 
 ## Before Use
 

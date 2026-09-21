@@ -1,24 +1,57 @@
 using System.Xml;
 using System.Xml.Linq;
+using System.Text.RegularExpressions;
 
 namespace AdobeDownloader.Core;
 
 public sealed class CatalogClient(AdobeTransport transport)
 {
-    public static Uri CatalogUrl(string platform)
+    public static Uri CatalogUrl(string platform, IEnumerable<string>? channels = null)
     {
         ValidatePlatform(platform);
+        var names = (channels ?? ["ccm", "sti", "nocc"]).Distinct().Order().ToArray();
+        if (names.Length == 0 || names.Length > 32 || names.Any(x => !Regex.IsMatch(x, "^[A-Za-z0-9_-]{1,64}$")))
+            throw new InvalidDataException("Invalid Adobe catalog channels.");
         return new Uri("https://prod-rel-ffc-ccm.oobesaas.adobe.com/adobe-ffc-external/core/v6/products/all" +
-            $"?channel=ccm&channel=sti&channel=nocc&platform={platform}&payload=true&productType=Desktop&_type=xml");
+            "?" + string.Join("&", names.Select(x => "channel=" + Uri.EscapeDataString(x))) +
+            $"&platform={platform}&payload=true&productType=Desktop&_type=xml");
     }
 
     public async Task<IReadOnlyList<ProductBuild>> FetchAsync(string platform = "win64", CancellationToken ct = default)
         => Parse(await transport.GetTextAsync(CatalogUrl(platform), null, ct), platform);
 
+    public async Task<IReadOnlyList<ProductBuild>> FetchDependencyCatalogAsync(string target, CancellationToken ct = default)
+    {
+        ValidatePlatform(target);
+        // Adobe publishes architecture-neutral and mixed-architecture packages (including ACR)
+        // under win32. Payload ProcessorFamily and Condition still control selection.
+        var platforms = target == "win32" ? new[] { target } : new[] { target, "win32" };
+        var channels = new HashSet<string>(["ccm", "sti", "nocc"], StringComparer.Ordinal);
+        for (var pass = 0; pass < 5; pass++)
+        {
+            var discovered = new HashSet<string>(channels, StringComparer.Ordinal);
+            var builds = new List<ProductBuild>();
+            foreach (var platform in platforms)
+            {
+                var xml = await transport.GetTextAsync(CatalogUrl(platform, channels), null, ct);
+                builds.AddRange(Parse(xml, platform));
+                using var reader = XmlReader.Create(new StringReader(xml), new XmlReaderSettings
+                    { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
+                foreach (var entry in XDocument.Load(reader).Descendants("custom-entry")
+                    .Where(x => (string?)x.Attribute("key") == "dependencyFFCChannel"))
+                    foreach (var value in entry.Elements("value"))
+                        if (!string.IsNullOrWhiteSpace(value.Value)) discovered.Add(value.Value.Trim());
+            }
+            if (discovered.SetEquals(channels)) return builds;
+            channels = discovered;
+        }
+        throw new InvalidDataException("Adobe dependency channel discovery did not converge.");
+    }
+
     public static void ValidatePlatform(string platform)
     {
-        if (platform is not ("win64" or "winarm64"))
-            throw new ArgumentException("Platform must be win64 or winarm64.");
+        if (platform is not ("win64" or "winarm64" or "win32"))
+            throw new ArgumentException("Platform must be win64, winarm64, or win32.");
     }
 
     public static IReadOnlyList<ProductBuild> Parse(string xml, string platform)
@@ -58,7 +91,8 @@ public sealed class CatalogClient(AdobeTransport transport)
                             .Select(x => (string?)x.Attribute("name") ?? "").Where(x => x.Length > 0).Distinct().ToArray(),
                         (language.Element("dependencies")?.Elements("dependency") ?? [])
                             .Select(x => new Dependency(Required(x.Element("sapCode")?.Value, "dependency SAP code"),
-                                x.Element("baseVersion")?.Value ?? "")).ToArray(), packageType));
+                                x.Element("baseVersion")?.Value ?? "", x.Element("productVersion")?.Value ?? "",
+                                x.Element("buildGuid")?.Value ?? "")).ToArray(), packageType));
                 }
             }
         }

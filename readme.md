@@ -28,6 +28,11 @@ from upstream commit `36ebd80` (release 3.1.0).
 - Download an explicitly selected package from Adobe HTTPS servers.
 - Check download size and optionally a supplied SHA-256 digest.
 - Keep incomplete files separate from completed downloads.
+- Resolve supported dependencies into a saved, reviewable full-package download plan.
+- Persist a download queue and resume interrupted transfers with validated ETags.
+
+Phase two is in progress. Unknown package conditions or module selections stop planning
+with an explicit error. Delta updates and Adobe signature validation are still pending.
 
 The Windows implementation is C#/.NET, under [`windows/`](windows/).
 The original Swift/macOS application remains in the repository as the porting reference.
@@ -48,7 +53,7 @@ See the [Windows usage guide](windows/README.md) and [validation evidence](docs/
 ## Roadmap
 
 1. Windows catalog, metadata, and single-package download foundation — complete.
-2. Dependency resolution, complete download plans, resumable transfers, and persistent queues.
+2. Dependency resolution, complete download plans, resumable transfers, and persistent queues — in progress.
 3. Windows installation, elevation, application registration, and rollback.
 4. Native desktop interface.
 5. Clean-machine validation, release packaging, and documentation.

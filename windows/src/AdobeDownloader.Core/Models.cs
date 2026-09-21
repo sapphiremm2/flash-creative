@@ -1,6 +1,6 @@
 namespace AdobeDownloader.Core;
 
-public sealed record Dependency(string SapCode, string BaseVersion);
+public sealed record Dependency(string SapCode, string BaseVersion, string ProductVersion = "", string BuildGuid = "");
 
 public sealed record ProductBuild(
     string SapCode, string DisplayName, string Version, string ProductVersion,
@@ -10,7 +10,8 @@ public sealed record ProductBuild(
 
 public sealed record PackageAsset(
     string Name, string FileName, string Type, string ProcessorFamily,
-    string Condition, long DownloadSize, Uri Url, string OpaqueHashKey);
+    string Condition, long DownloadSize, Uri Url, string OpaqueHashKey,
+    IReadOnlyList<string>? Features = null, string ValidationUrl = "");
 
 public sealed record ApplicationManifest(
     string SapCode, string ProductVersion, string Platform,
