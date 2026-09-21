@@ -84,16 +84,57 @@ public class PlannerTests
     [Fact] public async Task ArmPlanDoesNotIncludeX64Payload()
     {
         var root = Build("ARMAPP", platform: "winarm64");
-        var plan = await Planner(b => Manifest(b, [Package("arm", family: "arm64"), Package("intel")]))
+        var plan = await Planner(b => Manifest(b, [Package("arm", family: "arm64"), Package("intel", family: "x64")]))
             .CreateAsync(root, [root], "en_US", "10.0");
         Assert.Equal("arm", Assert.Single(plan.Downloads).Package.Name);
+    }
+
+    [Fact] public async Task BacktracksEarlierDependencyWhenLaterProductPinsOlderVersion()
+    {
+        var root = Build("ROOT", deps: [new("A", "1.0"), new("Z", "1.0")]);
+        var later = Build("Z", deps: [new("A", "1.0", "1.1")]);
+        var plan = await Planner().CreateAsync(root, [root, Build("A", "1.1"), Build("A", "1.2"), later], "en_US", "10.0");
+        Assert.Equal("1.1", plan.Products.Single(p => p.Build.SapCode == "A").Build.ProductVersion);
     }
 
     [Fact] public async Task UnknownModuleSelectionStopsPlanning()
     {
         var root = Build("APP");
-        await Assert.ThrowsAsync<NotSupportedException>(() => Planner(b => Manifest(b, [Package() with { Features = ["optional-module"] }]))
-            .CreateAsync(root, [root], "en_US", "10.0"));
+        await Assert.ThrowsAsync<InvalidDataException>(() => Planner().CreateAsync(root, [root], "en_US", "10.0",
+            options: new SelectionOptions(["unknown"])));
+    }
+
+    [Fact] public async Task NativeArmManifestUses64BitAsBitness()
+    {
+        var root = Build("ARM", platform: "winarm64");
+        var plan = await Planner(b => Manifest(b, [Package("legacy_x64", "[OSProcessorFamily]==64-bit")]))
+            .CreateAsync(root, [root], "en_US", "10.0");
+        Assert.Single(plan.Downloads);
+    }
+    [Fact] public async Task SharedWin32DoesNotAuthorize64BitPayloadOnArm()
+    {
+        var root = Build("ARM", platform: "winarm64", deps: [new("SHARED", "1.0")]);
+        var shared = Build("SHARED", platform: "win32");
+        await Assert.ThrowsAsync<InvalidDataException>(() => Planner(b => Manifest(b,
+            [Package(family: b.Platform == "winarm64" ? "arm64" : "64-bit")]))
+            .CreateAsync(root, [root, shared], "en_US", "10.0"));
+    }
+    [Fact] public async Task DeltaWithoutTrustedBaselineFallsBackToFullAndExplainsWhy()
+    {
+        var root = Build("APP");
+        var full = Package() with { Deltas = [new("delta", "0.9", 1, new("https://ccmdls.adobe.com/delta.zip"), new("https://ccmdls.adobe.com/diff.json"), "")] };
+        var plan = await Planner(b => Manifest(b, [full])).CreateAsync(root, [root], "en_US", "10.0");
+        Assert.Equal(full.Url, Assert.Single(plan.Downloads).Package.Url);
+        var decision = Assert.Single(Assert.Single(plan.Products).Decisions).Deltas!.Single();
+        Assert.False(decision.Selected);
+        Assert.Contains("no verified installed baseline", decision.Reason);
+    }
+    [Fact] public async Task ExplicitIncompatibleModuleFailsInsteadOfBeingSilentlyOmitted()
+    {
+        var root = Build("APP");
+        var planner = Planner(b => Manifest(b, [Package(), Package("addon", family: "arm64") with { Type = "non-core" }]) with
+            { Modules = [new("Addon", "Addon", "Deferred", false, false, ["addon"])] });
+        await Assert.ThrowsAsync<InvalidDataException>(() => planner.CreateAsync(root, [root], "en_US", "10.0", options: new(["Addon"])));
     }
 
     [Fact] public async Task WrongLocaleFails()

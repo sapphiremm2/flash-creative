@@ -11,11 +11,16 @@ public sealed record ProductBuild(
 public sealed record PackageAsset(
     string Name, string FileName, string Type, string ProcessorFamily,
     string Condition, long DownloadSize, Uri Url, string OpaqueHashKey,
-    IReadOnlyList<string>? Features = null, string ValidationUrl = "");
+    IReadOnlyList<string>? Features = null, string ValidationUrl = "", string PackageVersion = "",
+    string Alias = "", IReadOnlyList<DeltaAsset>? Deltas = null, string DetachedSignature = "");
+
+public sealed record DeltaAsset(string Name, string BaseVersion, long DownloadSize, Uri Url, Uri? MetadataUrl, string ValidationUrl);
+public sealed record ProductModule(string Id, string DisplayName, string DeploymentType, bool RequiresConsent,
+    bool Required, IReadOnlyList<string> Packages);
 
 public sealed record ApplicationManifest(
     string SapCode, string ProductVersion, string Platform,
     IReadOnlyList<PackageAsset> Packages, IReadOnlyList<Dependency> Dependencies,
-    string RawJson);
+    string RawJson, IReadOnlyList<ProductModule>? Modules = null);
 
-public sealed record DownloadResult(string Path, long Bytes, string Sha256);
+public sealed record DownloadResult(string Path, long Bytes, string Sha256, VerificationResult? Verification = null);

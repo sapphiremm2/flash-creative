@@ -35,4 +35,25 @@ public class ManifestTests
         ManifestClient.Parse(Json($"[{Package},{Package}]"), CatalogTests.Build));
     [Fact] public void RejectsEmptyPackages() => Assert.Throws<InvalidDataException>(() =>
         ManifestClient.Parse(Json("[]"), CatalogTests.Build));
+    [Fact] public void ParsesModulesFeaturesDeltaAndValidationEndpoints()
+    {
+        var json = Json(Package).Replace("\"packageHashKey\":\"opaque\"", """
+            "packageHashKey":"opaque","PackageVersion":"1.2.3","AliasPackageName":"alias",
+            "Features":{"Feature":[{}, {"Name":"Extra"}]},
+            "ValidationURLs":{"TYPE2":"https://cdn-ffc.oobesaas.adobe.com/validation"},
+            "DeltaPackages":[{"PackageName":"delta","BasePackageVersion":"1.2.2","DownloadSize":"2",
+              "Path":"/delta.zip","additionalInfo":{"MetadataFilePath":"/diff.json"}}]
+            """).Replace("\"Dependencies\":", """
+            "Modules":{"Module":{"Id":"Addon","DisplayName":"Extra","DeploymentType":"Deferred",
+              "RequiresUserConsent":true,"ReferencePackages":{"ReferencePackage":"alias"}}},"Dependencies":
+            """);
+        var manifest = ManifestClient.Parse(json, CatalogTests.Build);
+        var package = Assert.Single(manifest.Packages);
+        Assert.Equal("Extra", Assert.Single(package.Features!));
+        Assert.EndsWith("?algorithm=TYPE2", package.ValidationUrl);
+        Assert.Equal("https://ccmdls.adobe.com/diff.json", Assert.Single(package.Deltas!).MetadataUrl!.AbsoluteUri);
+        Assert.True(Assert.Single(manifest.Modules!).RequiresConsent);
+    }
+    [Fact] public void RejectsUnknownNonemptyFeatureObject() => Assert.Throws<InvalidDataException>(() =>
+        ManifestClient.Parse(Json(Package).Replace("\"packageHashKey\":\"opaque\"", "\"Features\":{\"Feature\":[{\"unknown\":true}]}"), CatalogTests.Build));
 }

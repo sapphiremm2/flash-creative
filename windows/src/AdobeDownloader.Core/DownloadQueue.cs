@@ -4,7 +4,7 @@ namespace AdobeDownloader.Core;
 
 public enum QueueItemStatus { Pending, Downloading, Paused, Failed, Completed }
 public sealed record QueueItem(PlannedDownload Download, QueueItemStatus Status = QueueItemStatus.Pending,
-    string? Sha256 = null, string? Error = null);
+    string? Sha256 = null, string? Error = null, VerificationResult? Verification = null);
 public sealed record QueueSnapshot(int SchemaVersion, DownloadPlan Plan, List<QueueItem> Items);
 
 public sealed class DownloadQueue(ResumableDownloader downloader)
@@ -29,7 +29,8 @@ public sealed class DownloadQueue(ResumableDownloader downloader)
             var item = snapshot.Items[i]; var expected = snapshot.Plan.Downloads[i];
             if (item.Download.DirectoryName != expected.DirectoryName || item.Download.Package.Url != expected.Package.Url ||
                 item.Download.Package.DownloadSize != expected.Package.DownloadSize || item.Download.Package.FileName != expected.Package.FileName ||
-                !Enum.IsDefined(item.Status)) throw new InvalidDataException("Queue item identity differs from the saved plan.");
+                item.Download.Package.ValidationUrl != expected.Package.ValidationUrl ||
+                item.Download.Package.OpaqueHashKey != expected.Package.OpaqueHashKey || !Enum.IsDefined(item.Status)) throw new InvalidDataException("Queue item identity differs from the saved plan.");
         }
         return snapshot;
     }
@@ -48,18 +49,18 @@ public sealed class DownloadQueue(ResumableDownloader downloader)
         {
             ct.ThrowIfCancellationRequested();
             var item = snapshot.Items[i];
-            snapshot.Items[i] = item with { Status = QueueItemStatus.Downloading, Error = null };
+            snapshot.Items[i] = item with { Status = QueueItemStatus.Downloading, Error = null, Verification = null };
             await Save();
             try
             {
                 var result = await downloader.DownloadAsync(item.Download.Package,
                     Path.Combine(directory, "packages", item.Download.DirectoryName), maxBytes, ct: ct);
-                snapshot.Items[i] = item with { Status = QueueItemStatus.Completed, Sha256 = result.Sha256, Error = null };
+                snapshot.Items[i] = item with { Status = QueueItemStatus.Completed, Sha256 = result.Sha256, Error = null, Verification = result.Verification };
                 await Save();
             }
-            catch (Exception ex) when (ex is OperationCanceledException or IOException or InvalidDataException or HttpRequestException)
+            catch (Exception ex) when (ex is OperationCanceledException or IOException or InvalidDataException or HttpRequestException or System.Xml.XmlException or OverflowException)
             {
-                snapshot.Items[i] = item with { Status = ct.IsCancellationRequested ? QueueItemStatus.Paused : QueueItemStatus.Failed, Error = ex.Message };
+                snapshot.Items[i] = item with { Status = ct.IsCancellationRequested ? QueueItemStatus.Paused : QueueItemStatus.Failed, Error = ex.Message, Verification = null };
                 await Save();
                 throw;
             }
@@ -80,6 +81,9 @@ public sealed class DownloadQueue(ResumableDownloader downloader)
                 !paths.Add(item.DirectoryName)) throw new InvalidDataException("Plan package directories must be unique numeric identifiers.");
             PackageDownloader.ValidateFileName(item.Package.FileName);
             AdobeTransport.ValidateUrl(item.Package.Url);
+            if (plan.RequiresAdobeValidation && string.IsNullOrWhiteSpace(item.Package.ValidationUrl))
+                throw new InvalidDataException("This plan requires Adobe validation metadata for every package.");
+            if (!string.IsNullOrEmpty(item.Package.ValidationUrl)) AdobeTransport.ValidateUrl(new Uri(item.Package.ValidationUrl));
             if (item.Package.DownloadSize <= 0) throw new InvalidDataException("Invalid package size in plan.");
         }
         _ = plan.TotalBytes;

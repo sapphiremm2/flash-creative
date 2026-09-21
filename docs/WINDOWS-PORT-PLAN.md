@@ -51,10 +51,14 @@ them SHA-256 just because they are hexadecimal.
 
 ## Phase 2 — Complete download sets
 
-Status: **in progress**. First milestone implemented: dependency planning across
+Status: **in progress**. Implemented: dependency planning across
 discovered channels and shared win32 catalog entries, strict package conditions,
 saved plans, persistent queues, validated ETag resume, retries, disk preflight, and
-completion receipts. See `PHASE-2-VALIDATION.md` for evidence and remaining work.
+completion receipts, explicit modules/features, dependency backtracking, Adobe HTTPS
+SHA-256 segment validation, and Windows embedded-signature verification. Live x64/ARM64
+metadata plans pass. Delta candidates fall back to full packages until a trusted installed
+baseline and patch engine exist; detached Adobe signatures and ARM hardware validation
+remain open. See `PHASE-2-VALIDATION.md` for evidence and remaining work.
 
 Resolve transitive dependencies across catalog channels, compatible versions and
 architectures, package conditions, language resources, optional modules, and full versus

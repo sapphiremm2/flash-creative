@@ -34,7 +34,7 @@ queried explicitly but is not yet validated on ARM hardware. Additional catalog
 channels `sti` and `nocc` are supported. Legacy MSI/RIBS entries are shown with their
 package type; the phase-one application-manifest flow only supports `hdPackage`.
 `--version` must be an exact `ProductVersion`, not the catalog's marketing version.
-Locale selects a catalog language set; it does not evaluate package conditions yet.
+Locale selects a catalog language set; `plan` also evaluates package language conditions.
 
 ## Download one selected package
 
@@ -54,11 +54,26 @@ overwriting an existing file. Ctrl+C removes the partial file (exit code 130).
 Network/validation errors return exit code 1. This `download` command intentionally
 remains a simple single-package transfer. Use queues below for persistent resume/retry.
 
-SHA-256 is computed locally. Supply `--sha256 <64 hex characters>` to compare against
-an independently trusted digest. Adobe's `packageHashKey` is retained as
-`OpaqueHashKey`; it is **not** treated as a SHA-256 checksum. Adobe validation/signature
-handling belongs to phase two. Downloaded packages are not claimed to be authenticated
-beyond HTTPS unless an expected digest is supplied and matches.
+New CLI downloads and plans require Adobe's HTTPS validation endpoint. Before publishing
+an archive, the downloader checks every segment against explicit TYPE2 (SHA-256)
+metadata, including exact coverage and the manifest's opaque package key. Verification
+also runs when reusing a completed queue file. Results report `AdobeHttpsSegmentSha256`.
+The `packageHashKey` remains opaque; it is not the file's SHA-256.
+
+`--sha256 <64 hex characters>` adds a comparison against a supplied digest. Older saved
+plans without validation metadata remain readable and report `LocalSha256ReceiptOnly`;
+regenerate their plan to require Adobe validation. HTTPS-served hashes are not detached
+Adobe digital signatures. The opaque `PackageValidation` field is retained but unverified.
+
+For an extracted executable, Windows signature verification is available separately:
+
+```powershell
+dotnet run --project $cli -c Release --no-build -- verify-signature --file .local/signature-check/VC_redist.x64.exe --publisher 'Microsoft Corporation'
+```
+
+Supply the exact expected signer name. This command verifies the embedded signature,
+Windows trust/revocation policy, and publisher; it never executes the file. Trust checks
+may need network access. It does not claim that ZIP archives have Authenticode signatures.
 
 Manifest output retains dependencies, processor family, and condition expressions.
 The single-package command downloads only the explicitly selected package; use `plan`
@@ -81,13 +96,15 @@ plan for another machine. `plan` preserves raw manifests and inclusion/exclusion
 reasons. It resolves discovered Adobe dependency channels, exact base-version/build
 constraints, and shared `win32` catalog entries; package processor/condition metadata
 then controls payload selection. Dependencies precede their consumers. Missing,
-ambiguous, cyclic, or conflicting dependencies fail explicitly.
+ambiguous, cyclic, or unsatisfiable dependencies fail explicitly. Bounded backtracking
+can select an older compatible dependency when a later product constrains its version.
 
 Queue state is stored in `QUEUE_DIRECTORY/queue.json`; payloads and their receipt/resume
 sidecars are under `packages/`. Queue execution is sequential and locked against concurrent
 runs. Ctrl+C preserves partial downloads and marks the active item paused. Run the same
 `queue-run` command to continue, including after a process crash. Completed files are
-checked against their saved size/SHA-256 receipt before being reused.
+checked against their saved size/SHA-256 receipt and, when present, fresh Adobe segment
+metadata before being reused. Queue status includes the verification method.
 
 Resume uses a strong ETag with `Range`/`If-Range`, as specified in
 [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html#section-13.1.5). The client checks
@@ -97,12 +114,37 @@ Transient failures get at most three attempts. Invalid range/size responses disc
 the partial file. Disk preflight conservatively reserves the full remaining package
 sizes, so it can require more free space than a resumed transfer ultimately needs.
 
-Phase two is **not complete**: plans currently use full payloads only. Feature/module
-selection and Adobe validation/signature verification remain pending. Unknown condition
-variables or processor families stop planning. ARM64 selection has fixture tests but
-no hardware validation; x64 emulation on ARM is not inferred. Plans are download plans,
-not proof that a product can be installed or launched. Existing Adobe licensing remains
-unchanged. See [phase-two evidence](../docs/PHASE-2-VALIDATION.md).
+## Optional modules and features
+
+Inspect `manifest` output for module IDs and feature names. Core packages are included;
+Deferred/OnDemand modules and optional features require explicit selection. For example:
+
+```powershell
+# Use a version currently listed in the catalog.
+dotnet run --project $cli -c Release --no-build -- plan --product AEFT --version 26.5.0.89 --modules AEFT-maxon --out after-effects-with-maxon.json
+```
+
+`--modules ID1,ID2` and `--features NAME1,NAME2` select root-product options. Use
+`SAP:ID` or `SAP:NAME` for dependencies. Explicitly selecting a consent-requiring module
+records the user's selection; the CLI never infers consent from a default. Unknown IDs,
+missing references, and selected modules with no compatible packages fail planning.
+
+## Current limits
+
+Phase two remains **in progress**. Plans use full packages and retain delta candidates
+with an explicit fallback reason. Safe delta use requires a verified installed baseline
+and supported patch operations, which depend on phase-three installation work. A live
+Bridge delta metadata request also returned HTTP 403; there is no bypass or guessed metadata.
+
+Live metadata planning covers Bridge, Photoshop, and After Effects on x64 and Photoshop
+and After Effects on ARM64. Native `winarm64` manifests use `64-bit` to describe bitness,
+sometimes retaining `_x64` names. Those names do not override the selected native platform.
+Shared `win32` metadata alone does not authorize its 64-bit payloads on ARM, and explicit
+x64 processor values are excluded on ARM. No ARM hardware installation has been tested.
+
+Unknown condition variables or processor families stop planning. Plans are download
+plans, not proof that a product can be installed or launched. Existing Adobe licensing
+remains unchanged. See [phase-two evidence](../docs/PHASE-2-VALIDATION.md).
 
 ## Project map and roadmap
 

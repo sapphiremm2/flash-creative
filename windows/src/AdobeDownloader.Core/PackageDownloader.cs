@@ -56,9 +56,12 @@ public sealed class PackageDownloader(AdobeTransport transport)
             var sha256 = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
             if (expectedSha256 is not null && !sha256.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Downloaded package failed SHA-256 verification.");
+            var verification = package.ValidationUrl.Length > 0
+                ? await new AdobePackageVerifier(transport).VerifyAsync(package, partial, ct)
+                : new VerificationResult(expectedSha256 is null ? "LocalSha256ReceiptOnly" : "SuppliedSha256", "", 0);
             ct.ThrowIfCancellationRequested();
             File.Move(partial, destination, overwrite: false);
-            return new DownloadResult(destination, bytes, sha256);
+            return new DownloadResult(destination, bytes, sha256, verification);
         }
         finally
         {

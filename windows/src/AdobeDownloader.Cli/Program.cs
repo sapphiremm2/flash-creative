@@ -15,15 +15,17 @@ static async Task<int> RunAsync(string[] args)
             download --product CODE --version EXACT --package NAME --out DIRECTORY
                      [--max-mib 100] [--sha256 EXPECTED] [--platform win64] [--channel sti]
             plan --product CODE --version EXACT --out plan.json [--locale en_US] [--os-version 10.0.22000]
-                 [--platform win64] [--channel ccm]
+                 [--platform win64] [--channel ccm] [--modules ID,SAP:ID] [--features NAME,SAP:NAME]
             queue-create --plan plan.json --out QUEUE_DIRECTORY
             queue-run --queue QUEUE_DIRECTORY [--max-mib 100]
             queue-status --queue QUEUE_DIRECTORY
+            verify-signature --file EXECUTABLE --publisher "Microsoft Corporation"
 
             Versions must match ProductVersion exactly. Default platform: win64; channel: ccm.
             download selects ONE package; plan resolves supported dependencies into full packages.
             queue-run persists progress and resumes using strong ETags. No installation yet.
-            SHA-256 is a local receipt unless --sha256 supplies an independently trusted digest.
+            Adobe TYPE2 metadata verifies package segments when available; output reports the verification method.
+            Optional modules require explicit --modules selection, including consent-requiring modules.
             Ctrl+C preserves queue partials; the single-package download command removes them.
             Existing completed files are never overwritten.
             """);
@@ -36,15 +38,22 @@ static async Task<int> RunAsync(string[] args)
     try
     {
         var command = args[0];
-        if (command is not ("catalog" or "manifest" or "download" or "plan" or "queue-create" or "queue-run" or "queue-status"))
+        if (command is not ("catalog" or "manifest" or "download" or "plan" or "queue-create" or "queue-run" or "queue-status" or "verify-signature"))
             throw new ArgumentException("Unknown command; use --help.");
         var options = ParseOptions(args[1..]);
+        if (command == "verify-signature")
+        {
+            if (options.Count != 2 || !options.ContainsKey("file") || !options.ContainsKey("publisher"))
+                throw new ArgumentException("verify-signature requires --file and --publisher only.");
+            Console.WriteLine(JsonSerializer.Serialize(WindowsSignatureVerifier.Verify(options["file"], options["publisher"]), JsonFiles.Options));
+            return 0;
+        }
         if (command.StartsWith("queue-", StringComparison.Ordinal)) return await QueueCommandAsync(command, options, cancellation.Token);
         var allowed = command switch
         {
             "catalog" => new[] { "product", "platform", "channel", "json" },
             "manifest" => ["product", "version", "platform", "channel", "locale", "out"],
-            "plan" => ["product", "version", "platform", "channel", "locale", "os-version", "out"],
+            "plan" => ["product", "version", "platform", "channel", "locale", "os-version", "out", "modules", "features"],
             _ => ["product", "version", "platform", "channel", "locale", "out", "package", "max-mib", "sha256"]
         };
         if (options.Keys.Any(key => !allowed.Contains(key))) throw new ArgumentException("Option is not valid for this command; use --help.");
@@ -89,13 +98,16 @@ static async Task<int> RunAsync(string[] args)
         {
             var planner = new DownloadPlanner(new ManifestClient(transport).FetchAsync);
             var plan = await planner.CreateAsync(matches[0], catalog, locale,
-                Get("os-version", Environment.OSVersion.Version.ToString()), cancellation.Token);
+                Get("os-version", Environment.OSVersion.Version.ToString()), cancellation.Token,
+                new SelectionOptions(options.GetValueOrDefault("modules")?.Split(','), options.GetValueOrDefault("features")?.Split(',')));
+            plan = plan with { RequiresAdobeValidation = true };
+            DownloadQueue.Validate(plan);
             await JsonFiles.WriteAsync(output, plan, overwrite: false, ct: cancellation.Token);
             Console.WriteLine(JsonSerializer.Serialize(new
             {
                 Path = Path.GetFullPath(output), Products = plan.Products.Select(x => new { x.Build.SapCode, x.Build.ProductVersion, x.Build.Platform }),
                 Packages = plan.Downloads.Count, plan.TotalBytes,
-                Note = "Full packages only. See saved decisions and raw manifests. No installation or Adobe signature verification."
+                Note = "Full packages; delta fallback reasons are saved. Queue downloads require Adobe HTTPS SHA-256 segment verification. No installation or detached Adobe signature verification."
             }, JsonFiles.Options));
             return 0;
         }
@@ -113,6 +125,7 @@ static async Task<int> RunAsync(string[] args)
         }
         var package = manifest.Packages.SingleOrDefault(x => x.Name.Equals(packageName, StringComparison.OrdinalIgnoreCase))
             ?? throw new ArgumentException("Package not found; inspect manifest output for exact package names.");
+        if (string.IsNullOrWhiteSpace(package.ValidationUrl)) throw new InvalidDataException("This package has no Adobe validation URL; download refused.");
         Console.Error.WriteLine($"Downloading {package.FileName} ({package.DownloadSize:N0} bytes). This is one package, not a complete installation set.");
         var result = await new PackageDownloader(transport).DownloadAsync(package, output, maxBytes,
             options.GetValueOrDefault("sha256"), ct: cancellation.Token);
@@ -125,7 +138,7 @@ static async Task<int> RunAsync(string[] args)
         return cancellation.IsCancellationRequested ? 130 : 1;
     }
     catch (Exception ex) when (ex is ArgumentException or FormatException or UnauthorizedAccessException or IOException or InvalidDataException or NotSupportedException or HttpRequestException or
-        JsonException or System.Xml.XmlException or OverflowException)
+        JsonException or System.Xml.XmlException or OverflowException or System.Security.Cryptography.CryptographicException)
     {
         Console.Error.WriteLine($"Error: {ex.Message}");
         return 1;
@@ -162,7 +175,7 @@ static async Task<int> QueueCommandAsync(string command, Dictionary<string, stri
     Console.WriteLine(JsonSerializer.Serialize(new
     {
         snapshot.Plan.TotalBytes,
-        Items = snapshot.Items.Select(x => new { x.Download.SapCode, Package = x.Download.Package.Name, x.Status, x.Sha256, x.Error })
+        Items = snapshot.Items.Select(x => new { x.Download.SapCode, Package = x.Download.Package.Name, x.Status, x.Sha256, x.Verification, x.Error })
     }, JsonFiles.Options));
     return 0;
 }

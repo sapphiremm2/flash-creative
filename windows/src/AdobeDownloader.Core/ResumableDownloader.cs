@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 namespace AdobeDownloader.Core;
 
 public sealed record ResumeState(string Url, long Size, string? EntityTag);
-public sealed record DownloadReceipt(string Url, long Size, string Sha256);
+public sealed record DownloadReceipt(string Url, long Size, string Sha256, VerificationResult? Verification = null);
 
 /// <summary>Preserves interrupted transfers; reuses bytes only with a matching strong ETag.</summary>
 public sealed class ResumableDownloader(AdobeTransport transport)
@@ -31,7 +31,9 @@ public sealed class ResumableDownloader(AdobeTransport transport)
             if (receipt.Url != package.Url.AbsoluteUri || receipt.Size != package.DownloadSize ||
                 new FileInfo(destination).Length != package.DownloadSize || receipt.Sha256 != hash)
                 throw new InvalidDataException("Existing completed download failed receipt verification.");
-            return new DownloadResult(destination, package.DownloadSize, hash);
+            var verified = await Verify(destination);
+            await JsonFiles.WriteAsync(receiptPath, receipt with { Verification = verified }, ct: ct);
+            return new DownloadResult(destination, package.DownloadSize, hash, verified);
         }
 
         for (var attempt = 0; attempt < maxAttempts; attempt++)
@@ -85,13 +87,14 @@ public sealed class ResumableDownloader(AdobeTransport transport)
                     output.Flush(flushToDisk: true);
                     if (offset != package.DownloadSize) throw new EndOfStreamException("Package transfer ended early; partial file retained.");
                 }
+                var verification = await Verify(partial);
                 var sha = await HashAsync(partial, ct);
                 // Receipt first permits recovery if publication succeeds but the queue checkpoint is interrupted.
-                await JsonFiles.WriteAsync(receiptPath, new DownloadReceipt(package.Url.AbsoluteUri, package.DownloadSize, sha), ct: ct);
+                await JsonFiles.WriteAsync(receiptPath, new DownloadReceipt(package.Url.AbsoluteUri, package.DownloadSize, sha, verification), ct: ct);
                 ct.ThrowIfCancellationRequested();
                 File.Move(partial, destination, overwrite: false);
                 File.Delete(statePath);
-                return new DownloadResult(destination, package.DownloadSize, sha);
+                return new DownloadResult(destination, package.DownloadSize, sha, verification);
             }
             catch (InvalidDataException) { Reset(); throw; }
             catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable && attempt + 1 < maxAttempts)
@@ -100,6 +103,10 @@ public sealed class ResumableDownloader(AdobeTransport transport)
             { await Task.Delay(TimeSpan.FromSeconds(attempt + 1), ct); }
         }
         throw new IOException("Download retry limit exceeded.");
+
+        Task<VerificationResult> Verify(string path) => package.ValidationUrl.Length > 0
+            ? new AdobePackageVerifier(transport).VerifyAsync(package, path, ct)
+            : Task.FromResult(new VerificationResult("LocalSha256ReceiptOnly", "", 0));
 
         void Reset()
         {

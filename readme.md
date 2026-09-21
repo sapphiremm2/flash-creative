@@ -26,13 +26,16 @@ from upstream commit `36ebd80` (release 3.1.0).
 - Query Adobe's official Windows product catalog.
 - Inspect exact versions, language sets, dependencies, and package manifests.
 - Download an explicitly selected package from Adobe HTTPS servers.
-- Check download size and optionally a supplied SHA-256 digest.
+- Verify archive segments against Adobe HTTPS SHA-256 metadata, plus optional supplied digests.
 - Keep incomplete files separate from completed downloads.
 - Resolve supported dependencies into a saved, reviewable full-package download plan.
 - Persist a download queue and resume interrupted transfers with validated ETags.
+- Select optional modules/features and resolve dependency constraints with bounded backtracking.
+- Check extracted Windows executable signatures and exact publisher identity.
 
 Phase two is in progress. Unknown package conditions or module selections stop planning
-with an explicit error. Delta updates and Adobe signature validation are still pending.
+with an explicit error. Delta application, detached Adobe signature verification, and
+ARM hardware validation remain pending; plans use full packages.
 
 The Windows implementation is C#/.NET, under [`windows/`](windows/).
 The original Swift/macOS application remains in the repository as the porting reference.
@@ -48,7 +51,7 @@ dotnet run --project windows/src/AdobeDownloader.Cli -c Release -- --help
 dotnet run --project windows/src/AdobeDownloader.Cli -c Release -- catalog --product KBRG
 ```
 
-See the [Windows usage guide](windows/README.md) and [validation evidence](docs/PHASE-1-VALIDATION.md).
+See the [Windows usage guide](windows/README.md) and [phase-two validation evidence](docs/PHASE-2-VALIDATION.md).
 
 ## Roadmap
 
