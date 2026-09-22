@@ -21,6 +21,7 @@ static async Task<int> RunAsync(string[] args)
             queue-create --plan plan.json --out QUEUE_DIRECTORY
             queue-run --queue QUEUE_DIRECTORY [--max-mib 100]
             queue-status --queue QUEUE_DIRECTORY
+            queue-audit --queue QUEUE_DIRECTORY [--offline]
             verify-signature --file EXECUTABLE --publisher "Microsoft Corporation"
 
             Versions must match ProductVersion exactly. Default platform: win64; channel: ccm.
@@ -40,7 +41,7 @@ static async Task<int> RunAsync(string[] args)
     try
     {
         var command = args[0];
-        if (command is not ("catalog" or "manifest" or "download" or "plan" or "queue-create" or "queue-run" or "queue-status" or "verify-signature" or "inspect-delta"))
+        if (command is not ("catalog" or "manifest" or "download" or "plan" or "queue-create" or "queue-run" or "queue-status" or "queue-audit" or "verify-signature" or "inspect-delta"))
             throw new ArgumentException("Unknown command; use --help.");
         var options = ParseOptions(args[1..]);
         if (command == "inspect-delta") return await InspectDeltaCommandAsync(options, cancellation.Token);
@@ -169,7 +170,7 @@ static async Task<int> QueueCommandAsync(string command, Dictionary<string, stri
 {
     var allowed = command switch
     {
-        "queue-create" => new[] { "plan", "out" }, "queue-run" => ["queue", "max-mib"], _ => ["queue"]
+        "queue-create" => new[] { "plan", "out" }, "queue-run" => ["queue", "max-mib"], "queue-audit" => ["queue", "offline"], _ => ["queue"]
     };
     if (options.Keys.Any(x => !allowed.Contains(x))) throw new ArgumentException("Invalid queue option; use --help.");
     string Require(string name) => options.GetValueOrDefault(name) ?? throw new ArgumentException($"--{name} is required.");
@@ -181,6 +182,13 @@ static async Task<int> QueueCommandAsync(string command, Dictionary<string, stri
         return 0;
     }
     var directory = Require("queue");
+    if (command == "queue-audit")
+    {
+        using var http = AdobeTransport.CreateHttpClient();
+        var report = await new QueueAuditor(new AdobeTransport(http)).AuditAsync(directory, options.ContainsKey("offline"), ct);
+        Console.WriteLine(JsonSerializer.Serialize(report, JsonFiles.Options));
+        return report.Complete ? 0 : 1;
+    }
     QueueSnapshot snapshot;
     if (command == "queue-run")
     {
@@ -207,7 +215,7 @@ static Dictionary<string, string> ParseOptions(string[] args)
         if (!args[i].StartsWith("--", StringComparison.Ordinal)) throw new ArgumentException("Expected a --named option.");
         var key = args[i][2..];
         string value;
-        if (key == "json") value = "true";
+        if (key is "json" or "offline") value = "true";
         else
         {
             if (++i >= args.Length || args[i].StartsWith("--", StringComparison.Ordinal))

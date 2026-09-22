@@ -32,6 +32,7 @@ from upstream commit `36ebd80` (release 3.1.0).
 - Keep incomplete files separate from completed downloads.
 - Resolve supported dependencies into a saved, reviewable full-package download plan.
 - Persist a download queue and resume interrupted transfers with validated ETags.
+- Audit a completed download set online or offline without changing files.
 - Select optional modules/features and resolve dependency constraints with bounded backtracking.
 - Check extracted Windows executable signatures and exact publisher identity.
 - Inspect delta update instructions and verify a local delta archive without applying it.

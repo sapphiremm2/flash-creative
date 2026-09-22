@@ -27,7 +27,9 @@ public sealed class DownloadQueue(ResumableDownloader downloader)
         for (var i = 0; i < snapshot.Items.Count; i++)
         {
             var item = snapshot.Items[i]; var expected = snapshot.Plan.Downloads[i];
-            if (item.Download.DirectoryName != expected.DirectoryName || item.Download.Package.Url != expected.Package.Url ||
+            if (item.Download.SapCode != expected.SapCode || item.Download.ProductVersion != expected.ProductVersion ||
+                item.Download.Package.Name != expected.Package.Name ||
+                item.Download.DirectoryName != expected.DirectoryName || item.Download.Package.Url != expected.Package.Url ||
                 item.Download.Package.DownloadSize != expected.Package.DownloadSize || item.Download.Package.FileName != expected.Package.FileName ||
                 item.Download.Package.ValidationUrl != expected.Package.ValidationUrl ||
                 item.Download.Package.OpaqueHashKey != expected.Package.OpaqueHashKey || !Enum.IsDefined(item.Status)) throw new InvalidDataException("Queue item identity differs from the saved plan.");

@@ -122,6 +122,27 @@ Transient failures get at most three attempts. Invalid range/size responses disc
 the partial file. Disk preflight conservatively reserves the full remaining package
 sizes, so it can require more free space than a resumed transfer ultimately needs.
 
+## Audit an existing download set
+
+```powershell
+dotnet run --project $cli -c Release --no-build -- queue-audit --queue bridge-queue
+# No network access: check file sizes, local receipts, and checkpoint hashes only.
+dotnet run --project $cli -c Release --no-build -- queue-audit --queue bridge-queue --offline
+```
+
+Auditing never downloads replacements, resumes partials, repairs files, or changes queue
+state. It reports every item as Verified, Incomplete, Missing, Invalid, or Unavailable.
+Online audits fetch fresh Adobe segment metadata when the plan provides a validation
+URL. Offline audits and legacy items without that URL report `LocalSha256ReceiptOnly`.
+They never inherit an Adobe verification claim from a previous receipt.
+
+`Complete` means every item passed the requested audit mode. `AdobeVerified` is true
+only when every item passed fresh Adobe segment checks during this audit. An offline
+success does not satisfy Adobe verification, even if `RequiresAdobeValidation` is true
+in the saved plan. Exit code 0 means the requested mode passed; 1 means an incomplete or
+failed audit, and 130 means user cancellation. Results describe the files at audit time,
+not installation readiness. A concurrent writer may make an audit unavailable.
+
 ## Optional modules and features
 
 Inspect `manifest` output for module IDs and feature names. Core packages are included;

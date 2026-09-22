@@ -1,4 +1,4 @@
-# Phase two: download planning and validation, 2026-09-21
+# Phase two: download planning and validation, 2026-09-22
 
 Status: **in progress**, with a working plan â†’ persistent queue â†’ resumable download path.
 
@@ -19,7 +19,7 @@ Status: **in progress**, with a working plan â†’ persistent queue â†’ 
   Missing/weak validators restart; a 200 response to a range request restarts; invalid
   range/ETag responses fail without publishing corrupt output. Retries are bounded.
 
-Release build: **zero warnings and errors**. Automated suite: **126 passing tests**.
+Release build: **zero warnings and errors**. Automated suite: **137 passing tests**.
 The suite includes connection loss, persisted cancellation/restart, changed validators,
 missing validators, ignored ranges, invalid content ranges, 416 recovery, completed-file
 tampering, queue locks/budgets, dependency graphs, condition parsing, and ARM64 selection.
@@ -150,6 +150,31 @@ Metadata: `.local/*-delta-inspection.json`; archive evidence: `.local/bridge-del
 Delta validation responses omit `packageHashKey`; parsing permits omission only when
 no expected key was supplied. Full-package validation still rejects missing/mismatched
 keys when the selected manifest supplied one.
+
+## Read-only queue audit, 2026-09-22
+
+`queue-audit` checks every checkpoint marked Completed against the saved plan, payload
+size, receipt identity, receipt SHA-256, and checkpoint SHA-256. Online mode additionally
+fetches fresh Adobe segment metadata when available. `--offline` makes no network requests
+and reports only local receipt verification. The report separates `Complete` from
+`AdobeVerified`; neither asserts that installation or delta application is ready.
+
+Missing files are reported instead of downloaded. Failed, paused, or pending items are
+reported as incomplete. Corruption and unavailable validation are reported per item,
+without abandoning the rest of the report. Audit opens existing files read-only and
+creates no lock files. Caller cancellation propagates without changing queue state.
+Queue validation also rejects a copied item that changes its product, version, or package
+name relative to the plan, even when its URL and bytes remain the same.
+
+The existing **18,307,193-byte runtime queue** passed both modes. Offline reported
+`Complete=true`, `AdobeVerified=false`; online reported both true after verifying all
+nine Adobe segments. A before/after inventory and SHA-256 of every queue file confirmed
+that no files were added, removed, or changed. Evidence inventory:
+`.local/queue-audit-before.json` against `.local/runtime-verified-queue/`.
+
+New tests cover mixed missing/corrupt/paused/valid items, network-free offline checks,
+legacy receipts, fresh Adobe failures, missing queues, cancellation, and relabeled items.
+The full suite has 137 passing tests; Release build has zero warnings or errors.
 
 ## Remaining phase-two work and dependencies
 
