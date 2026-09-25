@@ -75,6 +75,11 @@ omission of mandatory packages.
 
 ## Phase 3 — Windows installation
 
+Status: **started: verified manifest inspection**. `inspect-install` inventories real
+Windows PIMX operations after fresh manifest and archive verification. Plain XML and
+property-prefixed LZMA2 PIMX are supported. This is read-only preflight research, not
+an executable install plan. Evidence and the next work: `PHASE-3-VALIDATION.md`.
+
 Inspect real Windows package manifests and establish supported install operations.
 Implement extraction, preflight compatibility, a narrow elevated helper, registry and
 application registration, required runtime dependencies, logs, and rollback/uninstall.

@@ -214,6 +214,27 @@ provides registration and rollback. Planners continue to choose full packages.
 Compression uses SharpCompress 0.50.4 ([MIT license](SHARPCOMPRESS-LICENSE.txt)); the
 BSDIFF40 reader implements the [documented format](https://www.daemonology.net/bsdiff/).
 
+## Inspect Windows installation requirements
+
+`inspect-install` is the first phase-three preflight tool. It refreshes the selected
+Adobe application manifest, checks that the saved package URL and size still match,
+and verifies the local full archive against fresh Adobe segment hashes before reading
+its PIMX. It supports plain XML and property-prefixed LZMA2 metadata.
+
+```powershell
+dotnet run --project $cli -c Release --no-build -- inspect-install --plan bridge-old-plan.json --product KBRG --package AdobeBridge16.0-mul-x64 --archive old.zip --out install-report.json
+```
+
+The report includes asset/command counts, original instruction XML, symbolic variables,
+unknown top-level sections and operation kinds, and a manifest SHA-256. Nested conditions,
+localized registry values, and command arguments remain intact; they are not evaluated.
+`UnknownElements` describes inventory recognition, not execution support. Even an empty
+list leaves `CanInstall=false`. `DetachedSignatureVerified=false` remains explicit.
+Reports never overwrite existing files. No payload extraction, registry changes, elevation,
+or program execution occurs. PIMX identity must match the verified package metadata;
+DTD/entities, ambiguous entries, namespaces, excessive nesting, and size overruns fail.
+See [phase-three evidence](../docs/PHASE-3-VALIDATION.md) for the supported research scope.
+
 ## Current limits
 
 Phase two remains **in progress**. Plans use full packages and retain delta candidates

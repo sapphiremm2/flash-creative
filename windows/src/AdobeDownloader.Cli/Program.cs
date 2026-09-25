@@ -18,6 +18,7 @@ static async Task<int> RunAsync(string[] args)
                  [--platform win64] [--channel ccm] [--modules ID,SAP:ID] [--features NAME,SAP:NAME]
                  [--deployment individual|enterprise]
             inspect-delta --plan plan.json --product CODE --package NAME --base-version EXACT [--archive delta.zip] [--out report.json]
+            inspect-install --plan plan.json --product CODE --package NAME --archive package.zip [--out report.json]
             stage-delta --plan target.json --baseline-plan old.json --product CODE --package NAME
                         --baseline-archive old.zip --archive delta.zip --out NEW_DIRECTORY --max-mib LIMIT
             queue-create --plan plan.json --out QUEUE_DIRECTORY
@@ -43,9 +44,10 @@ static async Task<int> RunAsync(string[] args)
     try
     {
         var command = args[0];
-        if (command is not ("catalog" or "manifest" or "download" or "plan" or "queue-create" or "queue-run" or "queue-status" or "queue-audit" or "verify-signature" or "inspect-delta" or "stage-delta"))
+        if (command is not ("catalog" or "manifest" or "download" or "plan" or "queue-create" or "queue-run" or "queue-status" or "queue-audit" or "verify-signature" or "inspect-delta" or "stage-delta" or "inspect-install"))
             throw new ArgumentException("Unknown command; use --help.");
         var options = ParseOptions(args[1..]);
+        if (command == "inspect-install") return await InspectInstallCommandAsync(options, cancellation.Token);
         if (command == "stage-delta") return await StageDeltaCommandAsync(options, cancellation.Token);
         if (command == "inspect-delta") return await InspectDeltaCommandAsync(options, cancellation.Token);
         if (command == "verify-signature")
@@ -153,6 +155,19 @@ static async Task<int> RunAsync(string[] args)
         return 1;
     }
     finally { Console.CancelKeyPress -= cancel; }
+}
+
+static async Task<int> InspectInstallCommandAsync(Dictionary<string, string> options, CancellationToken ct)
+{
+    string Require(string name) => options.GetValueOrDefault(name) ?? throw new ArgumentException($"--{name} is required.");
+    string[] allowed = ["plan", "product", "package", "archive", "out"];
+    if (options.Keys.Any(k => !allowed.Contains(k))) throw new ArgumentException("Invalid inspect-install option; use --help.");
+    var plan = await JsonFiles.ReadAsync<DownloadPlan>(Require("plan"), ct);
+    using var http = AdobeTransport.CreateHttpClient();
+    var report = await new InstallInspector(new AdobeTransport(http)).InspectAsync(plan, Require("product"), Require("package"), Require("archive"), ct);
+    if (options.TryGetValue("out", out var output)) await JsonFiles.WriteAsync(output, report, overwrite: false, ct: ct);
+    Console.WriteLine(JsonSerializer.Serialize(report, JsonFiles.Options));
+    return 0;
 }
 
 static async Task<int> StageDeltaCommandAsync(Dictionary<string, string> options, CancellationToken ct)
