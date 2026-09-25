@@ -10,7 +10,7 @@ The upstream macOS application is preserved. The port remains under the reposito
 The default `win64` target is for ordinary **64-bit Intel and AMD Windows PCs**. The
 CLI is built and tested on x64. `--platform winarm64` builds download plans from Adobe's
 ARM catalog; it is additional coverage, not a requirement for using Flash Creative.
-ARM hardware execution and installation remain untested. The CLI still does not install
+Native Windows x64 and ARM64 CI executes the core tests. The CLI still does not install
 applications on either architecture.
 
 ## Build and test
@@ -38,7 +38,7 @@ dotnet run --project $cli -c Release --no-build -- manifest --product KBRG --ver
 ```
 
 Defaults: `--platform win64`, `--channel ccm`, `--locale en_US`. `winarm64` can be
-queried explicitly but is not yet validated on ARM hardware. Additional catalog
+queried explicitly; native ARM64 CI verifies core execution, not Adobe app installation. Additional catalog
 channels `sti` and `nocc` are supported. Legacy MSI/RIBS entries are shown with their
 package type; the phase-one application-manifest flow only supports `hdPackage`.
 `--version` must be an exact `ProductVersion`, not the catalog's marketing version.
@@ -187,11 +187,38 @@ in memory; no payload is extracted or executed. Reports are written without over
 not prove the installed files match it. The command never converts a full-package plan
 to a delta plan. Unknown extra fields are reported for installation research, not applied.
 
+## Stage an archive-backed delta
+
+Both archives must already be downloaded. Supply a plan for each exact version and a
+new output directory. The command refreshes Adobe manifests and segment validation,
+then reconstructs files beneath `payload/INSTALLDIR`, `payload/AdobeCommon`, etc.
+These are symbolic staging folders, not actual system installation paths.
+
+```powershell
+dotnet run --project $cli -c Release --no-build -- stage-delta --plan bridge-plan.json --baseline-plan bridge-old-plan.json --product KBRG --package AdobeBridge16.0-mul-x64 --baseline-archive old.zip --archive delta.zip --out bridge-staged --max-mib 4096
+```
+
+Supported baseline formats are ZIP and ZIP-LZMA2. PATCH requires a matching EXISTS
+record whose old-file size and SHA-256 must pass before BSDIFF40 application. Every
+resulting file must match the target size and SHA-256. ADD/DELETE replacement pairs
+and unchanged EXISTS files are supported. Unknown operation combinations and instruction
+flags fail explicitly. Deletion omits a file from the new tree; it never deletes an
+installed file. Attributes, registry operations, services, and installation commands
+are not applied. Output size, patch memory, decoder dictionaries, and paths are bounded.
+
+The destination must not exist. A private sibling workspace is removed on failure or
+cancellation and renamed into place only after all file checks pass. The receipt says
+`Installed=false`. Keep the resulting tree private until phase-three installation work
+provides registration and rollback. Planners continue to choose full packages.
+
+Compression uses SharpCompress 0.50.4 ([MIT license](SHARPCOMPRESS-LICENSE.txt)); the
+BSDIFF40 reader implements the [documented format](https://www.daemonology.net/bsdiff/).
+
 ## Current limits
 
 Phase two remains **in progress**. Plans use full packages and retain delta candidates
-with an explicit fallback reason. Safe delta use requires a verified installed baseline
-and supported patch operations, which depend on phase-three installation work. The earlier
+with an explicit fallback reason. Archive-backed staging is supported; updating an installed
+application still depends on phase-three baseline inventory and transactional installation. The earlier
 Bridge HTTP 403 did not recur: Bridge, Photoshop, and Premiere Pro delta metadata were
 successfully inspected on 2026-09-21.
 

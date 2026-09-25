@@ -12,7 +12,7 @@ public sealed record PackageAsset(
     string Name, string FileName, string Type, string ProcessorFamily,
     string Condition, long DownloadSize, Uri Url, string OpaqueHashKey,
     IReadOnlyList<string>? Features = null, string ValidationUrl = "", string PackageVersion = "",
-    string Alias = "", IReadOnlyList<DeltaAsset>? Deltas = null, string DetachedSignature = "");
+    string Alias = "", IReadOnlyList<DeltaAsset>? Deltas = null, string DetachedSignature = "", string CompressionType = "");
 
 public sealed record DeltaAsset(string Name, string BaseVersion, long DownloadSize, Uri Url, Uri? MetadataUrl, string ValidationUrl);
 public sealed record ProductModule(string Id, string DisplayName, string DeploymentType, bool RequiresConsent,

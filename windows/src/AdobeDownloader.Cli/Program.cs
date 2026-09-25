@@ -18,6 +18,8 @@ static async Task<int> RunAsync(string[] args)
                  [--platform win64] [--channel ccm] [--modules ID,SAP:ID] [--features NAME,SAP:NAME]
                  [--deployment individual|enterprise]
             inspect-delta --plan plan.json --product CODE --package NAME --base-version EXACT [--archive delta.zip] [--out report.json]
+            stage-delta --plan target.json --baseline-plan old.json --product CODE --package NAME
+                        --baseline-archive old.zip --archive delta.zip --out NEW_DIRECTORY --max-mib LIMIT
             queue-create --plan plan.json --out QUEUE_DIRECTORY
             queue-run --queue QUEUE_DIRECTORY [--max-mib 100]
             queue-status --queue QUEUE_DIRECTORY
@@ -41,9 +43,10 @@ static async Task<int> RunAsync(string[] args)
     try
     {
         var command = args[0];
-        if (command is not ("catalog" or "manifest" or "download" or "plan" or "queue-create" or "queue-run" or "queue-status" or "queue-audit" or "verify-signature" or "inspect-delta"))
+        if (command is not ("catalog" or "manifest" or "download" or "plan" or "queue-create" or "queue-run" or "queue-status" or "queue-audit" or "verify-signature" or "inspect-delta" or "stage-delta"))
             throw new ArgumentException("Unknown command; use --help.");
         var options = ParseOptions(args[1..]);
+        if (command == "stage-delta") return await StageDeltaCommandAsync(options, cancellation.Token);
         if (command == "inspect-delta") return await InspectDeltaCommandAsync(options, cancellation.Token);
         if (command == "verify-signature")
         {
@@ -150,6 +153,22 @@ static async Task<int> RunAsync(string[] args)
         return 1;
     }
     finally { Console.CancelKeyPress -= cancel; }
+}
+
+static async Task<int> StageDeltaCommandAsync(Dictionary<string, string> options, CancellationToken ct)
+{
+    string Require(string name) => options.GetValueOrDefault(name) ?? throw new ArgumentException($"--{name} is required.");
+    string[] allowed = ["plan", "baseline-plan", "product", "package", "baseline-archive", "archive", "out", "max-mib"];
+    if (options.Keys.Any(k => !allowed.Contains(k))) throw new ArgumentException("Invalid stage-delta option; use --help.");
+    if (!long.TryParse(Require("max-mib"), NumberStyles.None, CultureInfo.InvariantCulture, out var mib) || mib <= 0)
+        throw new ArgumentException("--max-mib must be a positive integer.");
+    var target = await JsonFiles.ReadAsync<DownloadPlan>(Require("plan"), ct);
+    var baseline = await JsonFiles.ReadAsync<DownloadPlan>(Require("baseline-plan"), ct);
+    using var http = AdobeTransport.CreateHttpClient();
+    var result = await new DeltaStager(new AdobeTransport(http)).StageAsync(target, baseline, Require("product"), Require("package"),
+        Require("baseline-archive"), Require("archive"), Require("out"), checked(mib * 1024 * 1024), ct);
+    Console.WriteLine(JsonSerializer.Serialize(result, JsonFiles.Options));
+    return 0;
 }
 
 static async Task<int> InspectDeltaCommandAsync(Dictionary<string, string> options, CancellationToken ct)

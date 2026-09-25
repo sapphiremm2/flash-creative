@@ -6,7 +6,7 @@ packages without the Creative Cloud desktop installer.
 
 **Early development: downloads work; Windows installation is not implemented yet.**
 **Intel/AMD Windows PCs are the default target (`win64`).** ARM64 is an additional
-metadata-planning target; it is not required to run the x64 CLI.
+target with native Windows CI coverage; it is not required to run the x64 CLI.
 Adobe sign-in, subscriptions, and application licensing requirements still apply.
 Flash Creative is an independent project and is not affiliated with Adobe.
 
@@ -36,11 +36,13 @@ from upstream commit `36ebd80` (release 3.1.0).
 - Select optional modules/features and resolve dependency constraints with bounded backtracking.
 - Check extracted Windows executable signatures and exact publisher identity.
 - Inspect delta update instructions and verify a local delta archive without applying it.
+- Reconstruct a verified delta into a new staging directory from a verified baseline archive.
 - Plan individual or enterprise deployments, including Lightroom Classic's conditional packages.
 
 Phase two is in progress. Unknown package conditions or module selections stop planning
-with an explicit error. Delta application, detached Adobe signature verification, and
-ARM hardware validation remain pending; plans use full packages.
+with an explicit error. Archive-backed delta staging works; installed-app updates and
+detached Adobe signature verification remain pending. Plans still use full packages.
+The core test suite runs natively on Windows x64 and ARM64.
 
 The Windows implementation is C#/.NET, under [`windows/`](windows/).
 The original Swift/macOS application remains in the repository as the porting reference.

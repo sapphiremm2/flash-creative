@@ -59,9 +59,10 @@ SHA-256 segment validation, and Windows embedded-signature verification. Live x6
 metadata plans pass. Individual/enterprise conditions and read-only delta metadata/archive
 inspection are supported. Read-only queue audits verify completed sets online or against
 local receipts offline. Fifteen representative x64 products have live metadata plans.
-Delta candidates fall back to full packages until a trusted installed
-baseline and patch engine exist; detached Adobe signatures and ARM hardware validation
-remain open. See `PHASE-2-VALIDATION.md` for evidence and remaining work.
+Archive-backed delta staging reconstructs verified files with BSDIFF40 and ZIP-LZMA2.
+Plans still use full packages until installed-baseline inventory and transactional updates
+exist. Native Windows x64/ARM64 CI passes; actual Adobe installations and detached Adobe
+signature verification remain open. See `PHASE-2-VALIDATION.md` for evidence and remaining work.
 
 Resolve transitive dependencies across catalog channels, compatible versions and
 architectures, package conditions, language resources, optional modules, and full versus

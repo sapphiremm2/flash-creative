@@ -145,7 +145,7 @@ SHA-256: `2b6c2663dd26dc8a61a087293d24ad84212c000aebb56395668a746f4097642d`.
 Its embedded diff JSON exactly matches the separately fetched metadata. Its ACE.dll
 patch has a `BSDIFF40` header. This does not establish the old installed DLL's identity.
 Metadata: `.local/*-delta-inspection.json`; archive evidence: `.local/bridge-delta/` and
-`.local/bridge-delta-verified-inspection.json`. No patch or installer was executed.
+`.local/bridge-delta-verified-inspection.json`. No patch or installer was executed during that inspection; later staging evidence follows below.
 
 Delta validation responses omit `packageHashKey`; parsing permits omission only when
 no expected key was supplied. Full-package validation still rejects missing/mismatched
@@ -176,19 +176,59 @@ New tests cover mixed missing/corrupt/paused/valid items, network-free offline c
 legacy receipts, fresh Adobe failures, missing queues, cancellation, and relabeled items.
 The full suite has 137 passing tests; Release build has zero warnings or errors.
 
+## Archive-backed delta application, 2026-09-24
+
+`stage-delta` refreshes both exact manifests and revalidates the complete baseline and
+delta archives against Adobe HTTPS segment metadata. Bridge 16.0.6.9 to 16.0.7.36
+successfully reconstructed **2,545 files / 2,785,543,914 bytes**, including **375 BSDIFF40
+patches**, into a new directory. All baseline PATCH/EXISTS pairs and target file hashes
+passed. No installed files were read or modified and no Adobe program was executed.
+
+The old full archive is 680,386,232 bytes, verified against 325 Adobe segments;
+SHA-256 `e2cd65d96c1605723a6ff96f84ad728d9c98e4270b6745cc574d8ae0f595ed99`.
+The delta is 15,708,287 bytes, verified against eight segments (digest above).
+ZIP entries in the full package contain property-prefixed LZMA2 streams. For example,
+ACE.dll decodes to 1,379,304 bytes and its EXISTS hash matches the baseline; PATCH names
+the 1,391,080-byte target and its separate hash. Adobe's BSDIFF streams contain bounded
+zero padding, which is consumed and checked along with bzip2 CRCs.
+
+Evidence: `.local/bridge-baseline-plan.json`, `.local/bridge-baseline/`,
+`.local/bridge-delta/`, `.local/bridge-reconstructed/stage-receipt.json`.
+This validates payload reconstruction for one x64 Bridge delta, not arbitrary Adobe
+formats, a complete installation, or updates against user-modified installed files.
+
+The local suite passes **158 tests**, including independent Python bz2/LZMA2 vectors,
+negative seeks, malformed patches, padding limits, cancellation, archive traversal,
+case collisions, ambiguous instructions, tampered archives, wrong baseline/target
+hashes, output budgets, destination preservation, and failed-stage cleanup. Release
+build: zero warnings/errors. NuGet audit reports no known vulnerabilities for the
+core's direct/transitive packages using its current source data.
+
+## Native Windows ARM64 CI
+
+[Run 35795840588](https://github.com/sapphiremm2/flash-creative/actions/runs/35795840588)
+passed on both `windows-latest` (X64) and `windows-11-arm` (Arm64). The architecture
+test asserts both OS and test-process architecture, preventing x64 emulation from
+being counted as native ARM execution. This first run predates the new delta tests;
+subsequent pushes use the same matrix. A personal ARM machine is not required for
+core CI. Adobe application installation and launch remain untested on either runner.
+
 ## Remaining phase-two work and dependencies
 
-- **Delta execution is unavailable.** Safe selection needs a verified installed baseline
-  and patch engine, both dependent on phase-three installation support. Delta metadata and archive
-  verification now work, but the planner still chooses full packages and never accepts
-  a claimed installed version as proof of the old files.
-- **Detached Adobe signatures remain unverified.** The opaque `PackageValidation` field
-  has no established trusted public key here. HTTPS segment checks and Windows embedded
-  signatures are separate evidence and are not described as verifying this field.
-- **ARM hardware and installation compatibility remain untested.** Native catalog and
-  manifest planning is verified; the table does not demonstrate installation or launch.
-- Broader Adobe products may expose additional condition/module schemas; unsupported
-  metadata fails explicitly rather than silently producing a partial installation set.
+- **Installed-app delta updates remain phase-three work.** Archive-backed staging now
+  works. Installed baseline inventory, registration, preservation of user changes,
+  elevation, and transactional rollback are not implemented; plans still select full packages.
+- **Detached Adobe signatures remain unverified.** `PackageValidation` samples decode
+  to opaque 384-byte values. Length does not establish an algorithm or signed message.
+  The upstream generic RSA helper accepts a caller-supplied key but supplies no trusted
+  Adobe key. Official-site searches for PackageValidation/packageHashKey did not establish
+  a key, key rotation policy, or signed-byte format. A trusted Adobe verification contract
+  and positive/negative real fixtures are needed before this can honestly be marked done.
+  HTTPS segment checks and Windows Authenticode are separate evidence.
+- **ARM core execution is validated; Adobe installation compatibility is not.** Native
+  catalog planning and native runner tests do not establish Adobe app installation/launch.
+- Broader Adobe products may expose additional schemas or compression/patch formats;
+  unsupported metadata fails explicitly.
 
 Windows signature reference: [Microsoft WinVerifyTrust](https://learn.microsoft.com/en-us/windows/win32/api/wintrust/nf-wintrust-winverifytrust).
 HTTP resume reference: [RFC 9110, If-Range](https://www.rfc-editor.org/rfc/rfc9110.html#section-13.1.5).

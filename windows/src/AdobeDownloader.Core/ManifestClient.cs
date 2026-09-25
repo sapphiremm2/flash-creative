@@ -36,7 +36,7 @@ public sealed class ManifestClient(AdobeTransport transport)
             packages.Add(new PackageAsset(name, fileName, Text(package, "Type"),
                 Text(package, "ProcessorFamily"), Text(package, "Condition"), size, url, Text(package, "packageHashKey"),
                 Items(package, "Features", "Feature").Where(x => !(x.ValueKind == JsonValueKind.Object && !x.EnumerateObject().Any())).Select(x => x.ValueKind == JsonValueKind.String ? x.GetString()! : Required(x, "Name")).ToArray(),
-                ValidationUrl(package), Text(package, "PackageVersion"), Text(package, "AliasPackageName"), ParseDeltas(package, build.Cdn), Text(package, "PackageValidation")));
+                ValidationUrl(package), Text(package, "PackageVersion"), Text(package, "AliasPackageName"), ParseDeltas(package, build.Cdn), Text(package, "PackageValidation"), Text(root, "CompressionType").Trim().ToLowerInvariant()));
         }
         if (packages.Count == 0) throw new InvalidDataException("Adobe manifest contains no downloadable packages.");
         if (packages.Select(p => p.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != packages.Count)
