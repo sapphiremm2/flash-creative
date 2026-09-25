@@ -1,6 +1,6 @@
 # Phase-three installation research
 
-Status: **started, not an installer**. The new `inspect-install` CLI command reads
+Status: **in progress, not an installer**. The new `inspect-install` CLI command reads
 verified full-package PIMX metadata and inventories requested installation operations.
 It does not authorize those operations for execution or modify an Adobe installation.
 
@@ -44,17 +44,60 @@ Asset, Registry, and RunProgram are recognized inventory categories, not support
 execution instructions. Shortcut, FolderIcon, Permission, and unknown sections remain
 visible in UnknownElements. Every report returns CanInstall=false. Adobe detached
 PackageValidation signatures remain unverified, separately from HTTPS segment checks.
+Research is now deferred under `VERIFICATION-POLICY.md`, not a blocker for installation work.
+
+## Typed planning and file-content recovery, 2026-09-25
+
+`plan-install` refreshes verified inspection and compiles strict asset/registry operations.
+Live Bridge preview: **4 asset mappings, 69 unique machine registry values, 9 blockers**.
+The nine blockers are one overlapping asset tree, two registry entries with unsupported
+preference/deletion flags, two per-user registry entries, a folder icon, a shortcut,
+and two permissions. One identical machine registry write coalesces. MIME registry key
+names retain legal forward slashes. The runtime preview retains its ignored asset and
+blocks RunProgram until a verified execution contract exists. Both CanExecute values
+remain false. Preview variables used only `.local/install-preview-variables.json` values;
+no target directories or registry entries were created.
+
+Evidence: `.local/bridge-typed-install-plan-v2.json` and
+`.local/runtime-typed-install-plan.json`. Planner conditions use the selected target's
+metadata and configured variables; actual host compatibility still needs preflight.
+
+`FileTransaction` is a library-only, unprivileged file-content recovery foundation:
+
+- Requires exact source and previous-content SHA-256, existing target parent directories,
+  a new separate journal directory, and an explicit storage budget.
+- Saves and flushes original/replacement content before publishing a Prepared journal.
+  Uses temporary sibling files and moves for replacement, then records Committed.
+- Recovers partial application from Prepared or Committed journals and supports repeated
+  rollback. Checks every backup and target before rollback; detected user edits stop it.
+- Rejects traversal, duplicate targets, reparse paths, corrupt backups, and overlapping
+  journal/target roots. A reserved lock prevents cooperating transactions from overlapping.
+
+This prototype does not restore ACLs, ownership, timestamps, alternate data streams, or
+registry state. It is not resistant to a hostile process racing directory changes and
+must not be exposed through an elevated helper. It assumes caller-owned directories and
+trusted local journals; checks and cooperative locks do not exclude arbitrary writers.
+Failed preparation may retain its new journal folder for diagnosis but changes no target
+content. Process-interruption recovery is tested; power-loss durability is not established.
+All mutation tests use newly created temporary fixtures, never Adobe installations.
+
+Local suite: **206 passing tests**; Release build has zero warnings/errors. New coverage
+includes paths/variables, localized values, registry views/types/conflicts, unknown commands,
+partial recovery, corrupt backups, user edits, idempotent rollback, budgets, cancellation,
+and transaction locks.
 
 ## Next implementation work
 
-1. Convert a bounded subset of these instructions into a typed Windows install plan,
-   with explicit variable resolution, locale/condition handling, target-path checks,
-   registry views/types, and rejection of all unsupported fields or commands.
-2. Implement file/registry inventory and a durable transaction journal for rollback,
-   preserving pre-existing values and user-modified files.
+1. Expand verified archive assets to concrete files and resolve directory overlaps;
+   implement user-context semantics, shortcuts, icons, and supported permissions.
+2. Add registry inventory/rollback and file metadata preservation. Harden transaction
+   directory/file handles and journal trust before adding elevation.
 3. Establish the narrow elevation boundary and dependency-execution contract, including
    exact publisher verification and exit/reboot handling for allowed runtime installers.
 4. Validate install, launch, rollback, and uninstall in a disposable Windows VM. Native
    x64/ARM64 core CI does not establish Adobe installation compatibility.
+
+Microsoft references: [HKCR and explicit machine/user Classes stores](https://learn.microsoft.com/en-us/windows/win32/sysinfo/hkey-classes-root-key),
+[alternate registry views](https://learn.microsoft.com/en-us/windows/win32/winprog64/accessing-an-alternate-registry-view).
 
 No experiments may use the user's existing Adobe installation as a test target.

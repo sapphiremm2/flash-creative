@@ -1,6 +1,6 @@
 # Flash Creative for Windows
 
-Working catalog/manifest CLI, single-package downloader, and phase-two preview of
+Working catalog/manifest CLI, single-package downloader, and supported phase-two
 dependency planning and persistent resumable queues. This does **not** install
 applications yet. See the phase-two limitations below before relying on a plan.
 The upstream macOS application is preserved. The port remains under the repository's GPLv3 license.
@@ -235,9 +235,43 @@ or program execution occurs. PIMX identity must match the verified package metad
 DTD/entities, ambiguous entries, namespaces, excessive nesting, and size overruns fail.
 See [phase-three evidence](../docs/PHASE-3-VALIDATION.md) for the supported research scope.
 
+## Compile an installation preview
+
+`plan-install` reruns verified inspection, then resolves a supported subset into typed
+asset and registry records. It writes a preview even when blocked (exit code 2).
+It never executes the preview; `CanExecute=false` remains true of every current plan.
+
+```powershell
+dotnet run --project $cli -c Release --no-build -- plan-install --plan bridge-old-plan.json --product KBRG --package AdobeBridge16.0-mul-x64 --archive old.zip --variables paths.json --out install-plan.json
+```
+
+`paths.json` is a JSON object mapping manifest variables to explicit preview values:
+
+```json
+{
+  "INSTALLDIR": "C:\\FlashCreativePreview\\Bridge",
+  "StagingFolder": "C:\\FlashCreativePreview\\Staging",
+  "AdobeCommon": "C:\\FlashCreativePreview\\Common",
+  "AdobeCode": "preview-only-identity"
+}
+```
+
+These example paths are not created. An actual installation identity and authorized
+system destinations must come from a future installer, not copied from this example.
+Locale and OS/deployment conditions come from the download plan; this is target planning,
+not a live-machine compatibility check. The planner supports strict asset flags and
+machine `REG_SZ`/`REG_BINARY` values, exact localized values, explicit registry views,
+and machine Classes mapping for HKCR. Identical registry writes coalesce; conflicting
+writes, overlapping asset destinations, unknown fields, missing variables, user settings,
+and executable commands remain blockers. Reports are created without overwrite.
+
+Detached Adobe signature research is **deferred**, not a phase-three blocker. See the
+[verification policy](../docs/VERIFICATION-POLICY.md). Existing HTTPS and segment checks
+remain mandatory, and future executable launches require Windows publisher verification.
+
 ## Current limits
 
-Phase two remains **in progress**. Plans use full packages and retain delta candidates
+The supported phase-two download flow is **complete**; phase three is in progress. Plans use full packages and retain delta candidates
 with an explicit fallback reason. Archive-backed staging is supported; updating an installed
 application still depends on phase-three baseline inventory and transactional installation. The earlier
 Bridge HTTP 403 did not recur: Bridge, Photoshop, and Premiere Pro delta metadata were

@@ -37,12 +37,13 @@ from upstream commit `36ebd80` (release 3.1.0).
 - Check extracted Windows executable signatures and exact publisher identity.
 - Inspect delta update instructions and verify a local delta archive without applying it.
 - Reconstruct a verified delta into a new staging directory from a verified baseline archive.
-- Inspect verified Windows installation manifests and inventory requested operations.
+- Inspect verified Windows installation manifests and compile typed asset/registry previews.
 - Plan individual or enterprise deployments, including Lightroom Classic's conditional packages.
 
-Phase two is in progress. Unknown package conditions or module selections stop planning
-with an explicit error. Archive-backed delta staging works; installed-app updates and
-detached Adobe signature verification remain pending. Plans still use full packages.
+The supported phase-two download flow is complete; phase-three installation is in progress.
+Unknown package conditions or module selections stop planning
+with an explicit error. Archive-backed delta staging works; installed-app execution and updates remain pending. Detached Adobe signature research is deferred
+under the [verification policy](docs/VERIFICATION-POLICY.md). Plans still use full packages.
 The core test suite runs natively on Windows x64 and ARM64.
 
 The Windows implementation is C#/.NET, under [`windows/`](windows/).

@@ -213,12 +213,14 @@ being counted as native ARM execution. This first run predates the new delta tes
 subsequent pushes use the same matrix. A personal ARM machine is not required for
 core CI. Adobe application installation and launch remain untested on either runner.
 
-## Remaining phase-two work and dependencies
+## Deferred research and compatibility limits
 
 - **Installed-app delta updates remain phase-three work.** Archive-backed staging now
   works. Installed baseline inventory, registration, preservation of user changes,
   elevation, and transactional rollback are not implemented; plans still select full packages.
-- **Detached Adobe signatures remain unverified.** `PackageValidation` samples decode
+- **Detached Adobe signature research is deferred by owner decision (2026-09-25).**
+  It is no longer a phase-two or installation-development blocker; required checks are
+  documented in `VERIFICATION-POLICY.md`. The signatures remain unverified. `PackageValidation` samples decode
   to opaque 384-byte values. Length does not establish an algorithm or signed message.
   The upstream generic RSA helper accepts a caller-supplied key but supplies no trusted
   Adobe key. Official-site searches for PackageValidation/packageHashKey did not establish

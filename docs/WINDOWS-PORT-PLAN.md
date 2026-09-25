@@ -51,7 +51,7 @@ them SHA-256 just because they are hexadecimal.
 
 ## Phase 2 — Complete download sets
 
-Status: **in progress**. Implemented: dependency planning across
+Status: **complete for the supported full-package download flow**. Implemented: dependency planning across
 discovered channels and shared win32 catalog entries, strict package conditions,
 saved plans, persistent queues, validated ETag resume, retries, disk preflight, and
 completion receipts, explicit modules/features, dependency backtracking, Adobe HTTPS
@@ -61,8 +61,8 @@ inspection are supported. Read-only queue audits verify completed sets online or
 local receipts offline. Fifteen representative x64 products have live metadata plans.
 Archive-backed delta staging reconstructs verified files with BSDIFF40 and ZIP-LZMA2.
 Plans still use full packages until installed-baseline inventory and transactional updates
-exist. Native Windows x64/ARM64 CI passes; actual Adobe installations and detached Adobe
-signature verification remain open. See `PHASE-2-VALIDATION.md` for evidence and remaining work.
+exist. Native Windows x64/ARM64 CI passes. Actual Adobe installations remain phase-three
+work; detached Adobe signature research is deferred under `VERIFICATION-POLICY.md`. See `PHASE-2-VALIDATION.md` for evidence and remaining work.
 
 Resolve transitive dependencies across catalog channels, compatible versions and
 architectures, package conditions, language resources, optional modules, and full versus
@@ -75,10 +75,12 @@ omission of mandatory packages.
 
 ## Phase 3 — Windows installation
 
-Status: **started: verified manifest inspection**. `inspect-install` inventories real
+Status: **in progress: verified inspection, typed planning, and file-content recovery**. `inspect-install` inventories real
 Windows PIMX operations after fresh manifest and archive verification. Plain XML and
 property-prefixed LZMA2 PIMX are supported. This is read-only preflight research, not
-an executable install plan. Evidence and the next work: `PHASE-3-VALIDATION.md`.
+an executable install plan. `plan-install` compiles bounded asset/registry operations and
+retains unsupported-operation blockers. The unprivileged file transaction journal has
+synthetic recovery tests; it is not connected to installation. Evidence and the next work: `PHASE-3-VALIDATION.md`.
 
 Inspect real Windows package manifests and establish supported install operations.
 Implement extraction, preflight compatibility, a narrow elevated helper, registry and
