@@ -262,8 +262,20 @@ Locale and OS/deployment conditions come from the download plan; this is target 
 not a live-machine compatibility check. The planner supports strict asset flags and
 machine `REG_SZ`/`REG_BINARY` values, exact localized values, explicit registry views,
 and machine Classes mapping for HKCR. Identical registry writes coalesce; conflicting
-writes, overlapping asset destinations, unknown fields, missing variables, user settings,
+writes, concrete file collisions, unknown fields, missing variables, user settings,
 and executable commands remain blockers. Reports are created without overwrite.
+
+The same verified archive is expanded into `Files` and `Directories` in the preview.
+Harmless overlapping directories are accepted when their actual file targets do not
+collide. Empty directories and ignored assets are accounted for; missing/unmapped files,
+links, unsafe names, and unsupported archive layouts stop a complete plan. The supported
+layout has one `1/` payload root. `ArchiveEntryBytes` is the ZIP entry's encoded size,
+not a decoded installation-space estimate. This step creates no destination files.
+
+Registry recovery now has isolated Windows HKCU tests alongside file-content recovery.
+Both are library-only prototypes; the CLI does not expose transaction execution or
+rollback. They need protected journals, metadata/security-descriptor handling, and
+concurrency hardening before an elevated installer can use them.
 
 Detached Adobe signature research is **deferred**, not a phase-three blocker. See the
 [verification policy](../docs/VERIFICATION-POLICY.md). Existing HTTPS and segment checks

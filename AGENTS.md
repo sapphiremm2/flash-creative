@@ -22,5 +22,7 @@ Rules:
 
 Follow `docs/VERIFICATION-POLICY.md`. Detached Adobe signature research is deferred by
 the project owner; retain Adobe HTTPS/segment checks and require execution-time Windows
-signature and expected-publisher verification before launching any installer. FileTransaction
-is an unprivileged file-content prototype, not an authorized elevated execution boundary.
+signature and expected-publisher verification before launching any installer. FileTransaction and
+RegistryTransaction are unprivileged recovery prototypes, not authorized elevated execution
+boundaries. Mutation tests must use newly created temporary directories and unique HKCU
+test subtrees, never existing Adobe installations or machine-wide registry targets.

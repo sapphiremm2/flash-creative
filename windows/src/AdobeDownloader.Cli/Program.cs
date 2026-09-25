@@ -169,11 +169,14 @@ static async Task<int> PlanInstallCommandAsync(Dictionary<string, string> option
     variables["OSVersion"] = plan.OsVersion;
     variables["IsEnterpriseDeployment"] = plan.IsEnterpriseDeployment ? "true" : "false";
     using var http = AdobeTransport.CreateHttpClient();
+    await using var archive = new FileStream(Require("archive"), FileMode.Open, FileAccess.Read, FileShare.Read);
     var inspection = await new InstallInspector(new AdobeTransport(http)).InspectAsync(plan, Require("product"), Require("package"), Require("archive"), ct);
     var result = WindowsInstallPlanner.Create(inspection, variables, plan.Locale);
+    if (variables.TryGetValue("StagingFolder", out var stagingRoot)) result = InstallAssetExpander.Expand(result, archive, stagingRoot);
+    else throw new ArgumentException("variables must include StagingFolder.");
     await JsonFiles.WriteAsync(Require("out"), result, overwrite: false, ct: ct);
     Console.WriteLine(JsonSerializer.Serialize(new { result.Product, result.Package, result.Applicable,
-        Assets = result.Assets.Count, RegistryValues = result.Registry.Count, result.Blockers, result.CanExecute, result.DetachedSignatureStatus }, JsonFiles.Options));
+        Assets = result.Assets.Count, Files = result.Files?.Count, Directories = result.Directories?.Count, RegistryValues = result.Registry.Count, result.Blockers, result.CanExecute, result.DetachedSignatureStatus }, JsonFiles.Options));
     return result.Blockers.Count == 0 ? 0 : 2;
 }
 

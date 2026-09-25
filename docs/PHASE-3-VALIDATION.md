@@ -86,12 +86,57 @@ includes paths/variables, localized values, registry views/types/conflicts, unkn
 partial recovery, corrupt backups, user edits, idempotent rollback, budgets, cancellation,
 and transaction locks.
 
+## Concrete asset expansion and registry recovery, 2026-09-25
+
+`plan-install` now holds the archive open without write/delete sharing for both fresh
+verification and ZIP entry expansion. The supported layout is one `1/` payload tree
+plus the matching root PIMX. The planner retains overlapping asset mappings until
+file-level expansion can distinguish harmless directory overlap from actual collisions.
+
+Live Bridge 16.0.6.9 preview now resolves **5 assets, 2,549 files, 388 directories, and
+69 registry values**, with **8 remaining blockers**. Every payload file is covered and
+no concrete destination collisions were found. The remaining blockers are the four
+per-user/preference registry operations, one folder icon, one shortcut, and two
+permissions. Empty directories are retained. The runtime's ignored asset is accounted
+for without install-file writes; its RunProgram remains blocked.
+
+Evidence: `.local/bridge-expanded-install-plan.json` and
+`.local/runtime-expanded-install-plan.json`. Both retain CanExecute=false. Entry sizes
+in Files are encoded ZIP-entry bytes (potentially LZMA2), not decoded disk-space estimates.
+Expansion reads names/metadata only and does not extract or execute payloads. Inputs are
+limited to 128 asset mappings and 100,000 ZIP entries; expansion rejects traversal,
+case collisions, links, missing/unmapped files, unexpected archive roots, and conflicting
+file/directory targets. Direct-file asset semantics remain unsupported.
+
+`RegistryTransaction` adds a library-only recovery prototype within an explicit,
+caller-owned Software subtree and 32/64-bit view. It journals Prepared before creating
+keys/writing values, then records Committed. Recovery accepts either state, checks all
+current values for conflicts first, restores the original types and data, and removes
+only empty keys recorded as created. New user values/subkeys prevent key removal.
+It never recursively deletes registry keys. Default values and String, ExpandString,
+Binary, None, MultiString, DWORD, and QWORD snapshots are covered; ExpandString is read
+without environment expansion. Repeated rollback is supported.
+
+All live mutation tests use unique `HKCU\Software\FlashCreativeTests\<GUID>` subtrees
+and temporary journal directories, removed after each test. No machine-wide or Adobe
+registry keys were modified. Tests reproduce partially applied Prepared journals,
+user edits, wrong baselines, duplicate targets, cancellation, wrong scope, and retention
+of user-added values. Total local suite: **235 passing tests**, zero build warnings/errors.
+
+Registry journals are trusted local state and have a 16 MiB bound. Cooperative locking
+is shared only by transactions using the same journal parent and exact scope; overlapping
+subtree scopes or arbitrary writers are not excluded. Registry symbolic links, journal
+ACL/authentication, hostile races, registry security descriptors, combined file/registry
+transactions, and elevation are not handled by this prototype. Do not expose it through
+an elevated helper yet. Directory contents/registry snapshots can contain private data;
+production journal storage must have access controls and a retention policy.
+
 ## Next implementation work
 
-1. Expand verified archive assets to concrete files and resolve directory overlaps;
-   implement user-context semantics, shortcuts, icons, and supported permissions.
-2. Add registry inventory/rollback and file metadata preservation. Harden transaction
-   directory/file handles and journal trust before adding elevation.
+1. Implement user-context semantics, shortcuts, icons, and supported permissions;
+   turn the concrete file map into verified extraction and installation operations.
+2. Preserve file metadata and registry security descriptors, combine file/registry recovery,
+   and harden handles, journal trust, and concurrency before adding elevation.
 3. Establish the narrow elevation boundary and dependency-execution contract, including
    exact publisher verification and exit/reboot handling for allowed runtime installers.
 4. Validate install, launch, rollback, and uninstall in a disposable Windows VM. Native

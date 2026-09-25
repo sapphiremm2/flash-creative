@@ -6,11 +6,12 @@ namespace AdobeDownloader.Core;
 
 public sealed record PlannedAsset(string Source, string Target, bool Recursive, bool Ignored);
 public sealed record PlannedRegistryValue(string Hive, string Key, string View, string Name, string Type, string Data);
+public sealed record PlannedAssetFile(string ArchiveEntry, string Target, long ArchiveEntryBytes);
 public sealed record InstallPlanBlocker(int? Operation, string Kind, string Reason);
 public sealed record WindowsInstallPlan(string Product, string Version, string Package, string ManifestSha256, string Locale,
     bool Applicable, IReadOnlyList<PlannedAsset> Assets, IReadOnlyList<PlannedRegistryValue> Registry,
     IReadOnlyList<InstallPlanBlocker> Blockers, bool CanExecute = false,
-    string DetachedSignatureStatus = "DeferredUnverified", bool RequireExecutablePublisherVerification = true);
+    string DetachedSignatureStatus = "DeferredUnverified", bool RequireExecutablePublisherVerification = true, IReadOnlyList<PlannedAssetFile>? Files = null, IReadOnlyList<string>? Directories = null);
 
 /// <summary>Compiles a reviewable subset. Never executes operations or treats a saved report as authorization.</summary>
 public static class WindowsInstallPlanner
@@ -65,7 +66,7 @@ public static class WindowsInstallPlanner
                     if (!source.StartsWith("[StagingFolder]", StringComparison.Ordinal)) throw new InvalidDataException("Asset source must use StagingFolder.");
                     var asset = new PlannedAsset(ResolvePath(source), ResolvePath(target), Flag("recursive"), Flag("ignoreAsset"));
                     if (!asset.Ignored && assets.Any(a => !a.Ignored && PathsOverlap(a.Target, asset.Target)))
-                        throw new InvalidDataException("Overlapping asset destinations require a merge policy.");
+                        blockers.Add(new(index, "Assets/Overlap", "Overlapping asset destinations require archive-level collision checks."));
                     assets.Add(asset);
                 }
                 else if (operation.Kind == "Commands/Registry")

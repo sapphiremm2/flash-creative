@@ -75,12 +75,13 @@ omission of mandatory packages.
 
 ## Phase 3 — Windows installation
 
-Status: **in progress: verified inspection, typed planning, and file-content recovery**. `inspect-install` inventories real
+Status: **in progress: verified inspection, concrete file planning, and file/registry recovery prototypes**. `inspect-install` inventories real
 Windows PIMX operations after fresh manifest and archive verification. Plain XML and
 property-prefixed LZMA2 PIMX are supported. This is read-only preflight research, not
 an executable install plan. `plan-install` compiles bounded asset/registry operations and
-retains unsupported-operation blockers. The unprivileged file transaction journal has
-synthetic recovery tests; it is not connected to installation. Evidence and the next work: `PHASE-3-VALIDATION.md`.
+retains unsupported-operation blockers. Verified ZIP entries resolve directory overlaps
+into concrete file/directory targets. File-content recovery and registry-value recovery
+have isolated tests; neither is connected to an elevated installer. Evidence and the next work: `PHASE-3-VALIDATION.md`.
 
 Inspect real Windows package manifests and establish supported install operations.
 Implement extraction, preflight compatibility, a narrow elevated helper, registry and
