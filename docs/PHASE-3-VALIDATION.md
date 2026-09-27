@@ -184,3 +184,26 @@ installed files or authorize execution; shell recovery blockers remain in place.
 Validation: 253 local tests pass, including seven new target/collision cases. No shell
 artifacts were created. Shortcut creation, desktop.ini merging, file attributes and
 ACL recovery, registry preferences/permissions, and elevation remain implementation work.
+
+
+## Folder icon transaction prototype
+
+FolderIconTransaction creates a UTF-16 desktop.ini with a relative ICO path, applies
+Hidden/System file attributes and the folder ReadOnly flag, and journals the original
+folder attributes before mutation. Recovery verifies content and folder attributes
+before removing its INI and restoring the folder flags. Prepared journals and repeated
+recovery are supported. Existing desktop.ini files are refused without modification;
+merging arbitrary existing settings is not implemented. The ICO must already exist
+inside the owned folder; this helper does not validate icon content or package trust.
+
+This is an unprivileged prototype for caller-owned directories and trusted local journals,
+not a CLI or elevated execution boundary. It uses the same exact-folder cooperative lock
+as FileTransaction. It does not protect against hostile writers, authenticate journals,
+restore directory timestamps/ACLs, or coordinate the full installation transaction.
+Shell execution blockers remain until integration and recovery hardening are complete.
+
+Seven isolated temporary-folder tests cover creation, Unicode/attributes, rollback,
+existing settings, edited content/attributes, partial Prepared state, invalid scope,
+and cancellation. All 260 local tests pass; no existing Adobe folders were changed.
+Implementation follows Microsoft's desktop.ini folder customization guidance:
+https://learn.microsoft.com/en-us/windows/win32/shell/how-to-customize-folders-with-desktop-ini
