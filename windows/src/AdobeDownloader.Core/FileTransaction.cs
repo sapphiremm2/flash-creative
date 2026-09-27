@@ -124,7 +124,7 @@ public static class FileTransaction
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
-    private static string ValidateRoot(string root)
+    internal static string ValidateRoot(string root)
     {
         root = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar);
         if (!Directory.Exists(root) || root.Length <= 3) throw new InvalidDataException("Transaction root must be an existing directory below a drive root.");
@@ -138,7 +138,7 @@ public static class FileTransaction
         if (!Within(root, path) || path == root || !Directory.Exists(Path.GetDirectoryName(path))) throw new InvalidDataException("Target parent must already exist inside transaction root.");
         return path;
     }
-    private static void NoLinks(string path)
+    internal static void NoLinks(string path)
     {
         for (var current = Path.GetFullPath(path); !string.IsNullOrEmpty(current); current = Path.GetDirectoryName(current))
         {
@@ -146,9 +146,9 @@ public static class FileTransaction
             catch (FileNotFoundException) { } catch (DirectoryNotFoundException) { }
         }
     }
-    private static FileStream Lock(string root) => new(Path.Combine(root, ".flash-transaction.lock"),
+    internal static FileStream Lock(string root) => new(Path.Combine(root, ".flash-transaction.lock"),
         FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 4096, FileOptions.DeleteOnClose);
-    private static bool Within(string root, string path) => path.Equals(root, StringComparison.OrdinalIgnoreCase) || path.StartsWith(root.TrimEnd('\\', '/') + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    internal static bool Within(string root, string path) => path.Equals(root, StringComparison.OrdinalIgnoreCase) || path.StartsWith(root.TrimEnd('\\', '/') + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     private static void HashFormat(string hash)
     { if (hash.Length != 64 || !hash.All(Uri.IsHexDigit)) throw new InvalidDataException("Expected SHA-256."); }
     private static bool Equal(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);

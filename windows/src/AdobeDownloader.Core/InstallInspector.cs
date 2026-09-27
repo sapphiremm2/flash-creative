@@ -13,7 +13,7 @@ public sealed record InstallManifestReport(string Package, string Scheme, string
     string ManifestSha256, IReadOnlyList<InstallOperation> Operations, IReadOnlyDictionary<string, int> OperationCounts,
     IReadOnlyList<string> Variables, IReadOnlyList<string> UnknownElements, bool CanInstall = false);
 public sealed record InstallInspection(string Product, string ProductVersion, string Archive,
-    VerificationResult Verification, InstallManifestReport Manifest, bool DetachedSignatureVerified = false);
+    VerificationResult Verification, InstallManifestReport Manifest, bool DetachedSignatureVerified = false, string CompressionType = "");
 
 /// <summary>Verified, read-only inventory of PIMX instructions. No instruction is authorized for execution.</summary>
 public sealed class InstallInspector(AdobeTransport transport)
@@ -46,7 +46,7 @@ public sealed class InstallInspector(AdobeTransport transport)
         var encoded = await ReadBounded(input, ct);
         var decoded = await DecodeAsync(encoded, ct);
         return new InstallInspection(product, download.ProductVersion, Path.GetFullPath(archivePath), verified,
-            Parse(decoded, packageName, package.ProcessorFamily));
+            Parse(decoded, packageName, package.ProcessorFamily), CompressionType: package.CompressionType);
     }
 
     public static InstallManifestReport Parse(byte[] xml, string expectedPackage, string expectedProcessorFamily)

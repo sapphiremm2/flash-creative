@@ -5,7 +5,8 @@ using System.Xml.Linq;
 namespace AdobeDownloader.Core;
 
 public sealed record PlannedAsset(string Source, string Target, bool Recursive, bool Ignored);
-public sealed record PlannedRegistryValue(string Hive, string Key, string View, string Name, string Type, string Data, string? OwnerSid = null);
+public sealed record PlannedRegistryValue(string Hive, string Key, string View, string Name, string Type, string Data, string? OwnerSid = null, bool PreserveExisting = false, bool PreserveOnUninstall = false, bool RecursiveDeleteRequested = false);
+public sealed record PlannedRegistryPermission(string Hive, string Key, string View, string Sid, string Rights, string Inheritance);
 public sealed record PlannedShortcut(string Target, string LinkPath);
 public sealed record PlannedFolderIcon(string FolderPath, string IconPath);
 public sealed record PlannedAssetFile(string ArchiveEntry, string Target, long ArchiveEntryBytes);
@@ -14,7 +15,7 @@ public sealed record WindowsInstallPlan(string Product, string Version, string P
     bool Applicable, IReadOnlyList<PlannedAsset> Assets, IReadOnlyList<PlannedRegistryValue> Registry,
     IReadOnlyList<InstallPlanBlocker> Blockers, bool CanExecute = false,
     string DetachedSignatureStatus = "DeferredUnverified", bool RequireExecutablePublisherVerification = true, IReadOnlyList<PlannedAssetFile>? Files = null, IReadOnlyList<string>? Directories = null,
-    IReadOnlyList<PlannedShortcut>? Shortcuts = null, IReadOnlyList<PlannedFolderIcon>? FolderIcons = null);
+    IReadOnlyList<PlannedShortcut>? Shortcuts = null, IReadOnlyList<PlannedFolderIcon>? FolderIcons = null, IReadOnlyList<PlannedRegistryPermission>? Permissions = null);
 
 /// <summary>Compiles a reviewable subset. Never executes operations or treats a saved report as authorization.</summary>
 public static class WindowsInstallPlanner
@@ -41,6 +42,7 @@ public static class WindowsInstallPlanner
         var blockers = manifest.UnknownElements.Where(x => x.StartsWith("Package", StringComparison.Ordinal) || x.Contains("/@"))
             .Select(x => new InstallPlanBlocker(null, x, "Unsupported manifest section or attribute.")).ToList();
         var assets = new List<PlannedAsset>(); var registry = new List<PlannedRegistryValue>();
+        var permissions = new List<PlannedRegistryPermission>();
         var shortcuts = new List<PlannedShortcut>(); var folderIcons = new List<PlannedFolderIcon>();
         var applicable = true;
         try { applicable = PackageConditions.Evaluate(manifest.Condition, values); }
@@ -75,7 +77,7 @@ public static class WindowsInstallPlanner
                 }
                 else if (operation.Kind == "Commands/Registry")
                 {
-                    if (element.Name != "Registry" || element.HasAttributes || element.Elements().Any(e => e.Name.Namespace != XNamespace.None || e.Name.LocalName is not ("Path" or "Name" or "Type" or "Value" or "LocalizedValue")))
+                    if (element.Name != "Registry" || element.Attributes().Any(a => a.Name.Namespace != XNamespace.None || a.Name.LocalName is not ("isUserPreferences" or "isRecursiveDelete")) || element.Elements().Any(e => e.Name.Namespace != XNamespace.None || e.Name.LocalName is not ("Path" or "Name" or "Type" or "Value" or "LocalizedValue")))
                         throw new InvalidDataException("Unsupported registry fields.");
                     string Scalar(string name)
                     {
@@ -83,6 +85,9 @@ public static class WindowsInstallPlanner
                         if (found.Length != 1 || found[0].HasElements || found[0].HasAttributes) throw new InvalidDataException($"Invalid registry {name}.");
                         return found[0].Value;
                     }
+                    bool Flag(string name) => element.Attribute(name)?.Value switch { null or "false" => false, "true" => true, _ => throw new InvalidDataException("Invalid registry flag.") };
+                    var preference = Flag("isUserPreferences"); var recursiveDelete = Flag("isRecursiveDelete");
+                    if (recursiveDelete && !preference) throw new InvalidDataException("Recursive deletion is unsupported outside preserved user preferences.");
                     var path = Resolve(Scalar("Path")); var separator = path.IndexOf('\\');
                     if (separator < 1) throw new InvalidDataException("Invalid registry path.");
                     var hive = path[..separator]; var key = path[(separator + 1)..];
@@ -97,6 +102,7 @@ public static class WindowsInstallPlanner
                         ownerSid = identity.User?.Value ?? throw new InvalidDataException("Initiating user SID is unavailable.");
                     }
                     if (key.Split('\\').Any(c => c.Length == 0 || c is "." or "..") || key.Contains('\0')) throw new InvalidDataException("Invalid registry subkey.");
+                    if (preference && hive != "HKEY_CURRENT_USER") throw new InvalidDataException("User preferences must target the initiating user's hive.");
                     var name = Resolve(Scalar("Name")); if (name == "Default") name = "";
                     var type = Scalar("Type");
                     if (element.Elements("Value").Count() + element.Elements("LocalizedValue").Count() != 1) throw new InvalidDataException("Expected one registry value source.");
@@ -123,12 +129,31 @@ public static class WindowsInstallPlanner
                     var existing = registry.SingleOrDefault(r => r.Hive == hive && r.Key.Equals(key, StringComparison.OrdinalIgnoreCase) && r.Name.Equals(name, StringComparison.OrdinalIgnoreCase) && r.View == view);
                     if (existing is not null)
                     {
-                        if (existing.Type == type && existing.Data == data) continue;
+                        if (existing.Type == type && existing.Data == data && existing.PreserveExisting == preference && existing.RecursiveDeleteRequested == recursiveDelete) continue;
                         throw new InvalidDataException("Conflicting registry value target.");
                     }
-                    registry.Add(new(hive, key, view, name, type, data, ownerSid));
+                    registry.Add(new(hive, key, view, name, type, data, ownerSid, preference, preference, recursiveDelete));
                     if (ownerSid is not null)
                         blockers.Add(new(index, "Commands/Registry/UserContext", "Execution must bind this SID to the initiating user and validate its loaded hive; elevated HKCU is not a substitute."));
+                }
+                else if (operation.Kind == "Commands/Permission")
+                {
+                    if (element.Name != "Permission" || element.HasAttributes || element.Elements().Any(e => e.Name.Namespace != XNamespace.None || e.Name.LocalName is not ("Path" or "User" or "PermissionValue")))
+                        throw new InvalidDataException("Unsupported permission fields.");
+                    string Scalar(string name)
+                    {
+                        var fields = element.Elements(name).ToArray();
+                        if (fields.Length != 1 || fields[0].HasElements || fields[0].HasAttributes) throw new InvalidDataException("Invalid permission field.");
+                        return fields[0].Value;
+                    }
+                    var path = Resolve(Scalar("Path")); const string prefix = "HKEY_LOCAL_MACHINE\\";
+                    if (!path.StartsWith(prefix, StringComparison.Ordinal) || !path[prefix.Length..].StartsWith("SOFTWARE\\", StringComparison.OrdinalIgnoreCase) ||
+                        path[prefix.Length..].Split('\\').Any(p => p.Length == 0 || p is "." or "..") || view.Length == 0 ||
+                        Scalar("User") != "Everyone" || Scalar("PermissionValue") != "GENERIC_READ")
+                        throw new InvalidDataException("Only key-only Everyone/ReadKey machine Software permissions are supported.");
+                    var permission = new PlannedRegistryPermission("HKEY_LOCAL_MACHINE", path[prefix.Length..], view, "S-1-1-0", "ReadKey", "None");
+                    if (!permissions.Any(p => p.Key.Equals(permission.Key, StringComparison.OrdinalIgnoreCase) && p.View == view)) permissions.Add(permission);
+                    blockers.Add(new(index, "Commands/Permission/Recovery", "Permission execution requires scoped ACL recovery and an authenticated elevation boundary."));
                 }
                 else if (operation.Kind is "Commands/Shortcut" or "Commands/FolderIcon")
                 {
@@ -184,7 +209,7 @@ public static class WindowsInstallPlanner
             catch (Exception ex) when (ex is InvalidDataException or XmlException or ArgumentException or NotSupportedException)
             { blockers.Add(new(index, operation.Kind, ex.Message)); }
         }
-        return new(inspection.Product, inspection.ProductVersion, manifest.Package, manifest.ManifestSha256, locale, applicable, assets, registry, blockers, Shortcuts: shortcuts, FolderIcons: folderIcons);
+        return new(inspection.Product, inspection.ProductVersion, manifest.Package, manifest.ManifestSha256, locale, applicable, assets, registry, blockers, Shortcuts: shortcuts, FolderIcons: folderIcons, Permissions: permissions);
 
         string Resolve(string text)
         {

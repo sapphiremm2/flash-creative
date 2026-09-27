@@ -312,3 +312,15 @@ pwsh -File scripts/graphify.ps1 export html
 ```
 
 AST updates are local. Use the Graphify skill for semantic updates to documentation.
+
+
+### Verified full-package staging
+
+`stage-install --plan plan.json --product CODE --package NAME --archive package.zip
+--variables paths.json --destination new-stage-directory --max-bytes 4000000000`
+
+Refreshes Adobe verification, expands the file map, and decodes assets into numbered
+staged files plus `stage.json`. The destination must be new and its parent must exist.
+The explicit byte limit applies to decoded content. Installation blockers are retained;
+this command does not execute installers or modify installation destinations. Generated
+staging hashes are inventory and do not replace fresh Adobe verification on later use.

@@ -6,7 +6,7 @@ namespace AdobeDownloader.Core;
 
 public sealed record RegistryValueSnapshot(RegistryValueKind Kind, string? Text = null, byte[]? Bytes = null,
     string[]? Strings = null, long? Number = null);
-public sealed record RegistryReplacement(string Key, string Name, RegistryValueSnapshot? Expected, RegistryValueSnapshot Value);
+public sealed record RegistryReplacement(string Key, string Name, RegistryValueSnapshot? Expected, RegistryValueSnapshot Value, bool PreserveOnUninstall = false);
 public sealed record RegistryScope(RegistryHive Hive, RegistryView View, string Root);
 public sealed record RegistryUndoJournal(int Version, RegistryScope Scope, string State,
     IReadOnlyList<RegistryReplacement> Entries, IReadOnlyList<string> CreatedKeys);
@@ -91,19 +91,28 @@ public static class RegistryTransaction
         using var transactionLock = Lock(scope, journalDirectory);
         await Recover(scope, journalDirectory, ct);
     }
-    private static async Task Recover(RegistryScope scope, string directory, CancellationToken ct)
+    public static async Task UninstallAsync(RegistryScope scope, string journalDirectory, CancellationToken ct = default)
+    {
+        Validate(scope); journalDirectory = Path.GetFullPath(journalDirectory);
+        using var transactionLock = Lock(scope, journalDirectory);
+        await Recover(scope, journalDirectory, ct, uninstall: true);
+    }
+    private static async Task Recover(RegistryScope scope, string directory, CancellationToken ct, bool uninstall = false)
     {
         var path = Path.Combine(directory, "registry-journal.json");
         var journal = await JsonFiles.ReadAsync<RegistryUndoJournal>(path, ct);
         if (journal.Version != 1 || journal.Scope.Hive != scope.Hive || journal.Scope.View != scope.View ||
-            !journal.Scope.Root.Equals(scope.Root, StringComparison.OrdinalIgnoreCase) || journal.State is not ("Prepared" or "Committed" or "RolledBack") ||
+            !journal.Scope.Root.Equals(scope.Root, StringComparison.OrdinalIgnoreCase) || journal.State is not ("Prepared" or "Committed" or "RolledBack" or "Uninstalling" or "Uninstalled") ||
             journal.Entries.Count is < 1 or > 10000 || journal.CreatedKeys.Count > 100000)
             throw new InvalidDataException("Unsupported or mismatched registry journal.");
+        if (uninstall && journal.State is "Prepared" or "RolledBack") throw new InvalidDataException("Only committed installs can be uninstalled.");
+        uninstall |= journal.State is "Uninstalling" or "Uninstalled";
         var targets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in journal.Entries)
         {
             Relative(entry.Key); Name(entry.Name); _ = Value(entry.Value); if (entry.Expected is not null) _ = Value(entry.Expected);
             if (!targets.Add(entry.Key + "\0" + entry.Name)) throw new InvalidDataException("Duplicate journal target.");
+            if (uninstall && entry.PreserveOnUninstall) continue;
             var current = Read(scope, entry.Key, entry.Name);
             if (!Equal(current, entry.Expected) && !Equal(current, entry.Value)) throw new InvalidDataException("Registry rollback conflict; current value was preserved.");
         }
@@ -113,9 +122,11 @@ public static class RegistryTransaction
             if (relative.Length == 0 || !journal.Entries.Any(e => e.Key.Equals(relative, StringComparison.OrdinalIgnoreCase) || e.Key.StartsWith(relative + "\\", StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidDataException("Invalid created-key journal entry.");
         }
+        if (uninstall) await JsonFiles.WriteAsync(path, journal with { State = "Uninstalling" }, ct: ct);
         using var hive = RegistryKey.OpenBaseKey(scope.Hive, scope.View);
         foreach (var entry in journal.Entries.Reverse())
         {
+            if (uninstall && entry.PreserveOnUninstall) continue;
             ct.ThrowIfCancellationRequested(); var current = Read(scope, entry.Key, entry.Name);
             if (Equal(current, entry.Expected)) continue;
             if (!Equal(current, entry.Value)) throw new InvalidDataException("Registry changed during rollback.");
@@ -131,7 +142,7 @@ public static class RegistryTransaction
             // Preserve keys containing values/subkeys added by someone else; never recursive-delete.
             if (key is not null && key.ValueCount == 0 && key.SubKeyCount == 0) hive.DeleteSubKey(Full(scope, relative), throwOnMissingSubKey: false);
         }
-        await JsonFiles.WriteAsync(path, journal with { State = "RolledBack" }, ct: ct);
+        await JsonFiles.WriteAsync(path, journal with { State = uninstall ? "Uninstalled" : "RolledBack" }, ct: ct);
     }
     private static object Value(RegistryValueSnapshot snapshot)
     {
@@ -147,7 +158,7 @@ public static class RegistryTransaction
             _ => throw new InvalidDataException("Unsupported or invalid registry value snapshot.")
         };
     }
-    private static void Validate(RegistryScope scope)
+    internal static void Validate(RegistryScope scope)
     {
         if (scope.Hive is not (RegistryHive.CurrentUser or RegistryHive.LocalMachine) || scope.View is not (RegistryView.Registry32 or RegistryView.Registry64) ||
             !scope.Root.StartsWith("Software\\", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("An explicit Software subtree and registry view are required.");
@@ -161,7 +172,7 @@ public static class RegistryTransaction
     private static void Name(string name) { if (name.Length > 16383 || name.Contains('\0')) throw new InvalidDataException("Invalid registry value name."); }
     private static string Full(RegistryScope scope, string relative) => relative.Length == 0 ? scope.Root : scope.Root + "\\" + relative;
     private static bool Equal(RegistryValueSnapshot? a, RegistryValueSnapshot? b) => JsonSerializer.Serialize(a) == JsonSerializer.Serialize(b);
-    private static FileStream Lock(RegistryScope scope, string directory)
+    internal static FileStream Lock(RegistryScope scope, string directory)
     {
         var parent = Path.GetDirectoryName(directory)!;
         if (!Directory.Exists(parent)) throw new InvalidDataException("Journal parent must already exist.");

@@ -114,10 +114,26 @@ public class WindowsInstallPlannerTests
         Assert.False(plan.CanExecute);
     }
     [Theory] [InlineData("isUserPreferences")] [InlineData("isRecursiveDelete")]
-    public void UserPreferenceFlagsRemainBlockedUntilTheirSemanticsAreImplemented(string flag)
+    public void PreferenceFlagsCannotBeAppliedToMachineRegistry(string flag)
     {
         var operation = Registry() with { Xml = Registry().Xml.Replace("<Registry>", $"<Registry {flag}=\"true\">") };
         var plan = WindowsInstallPlanner.Create(Inspect(operation), Variables, "en_US");
         Assert.Empty(plan.Registry); Assert.Single(plan.Blockers);
+    }
+    [Fact] public void UserPreferencesUseExplicitPreservationPolicy()
+    {
+        var operation = Registry() with { Xml = Registry().Xml.Replace("HKEY_CLASSES_ROOT", "HKEY_CURRENT_USER").Replace("<Registry>", "<Registry isUserPreferences=\"true\" isRecursiveDelete=\"true\">") };
+        var plan = WindowsInstallPlanner.Create(Inspect(operation), Variables, "en_US");
+        var value = Assert.Single(plan.Registry);
+        Assert.True(value.PreserveExisting); Assert.True(value.PreserveOnUninstall); Assert.True(value.RecursiveDeleteRequested);
+        Assert.Equal("Commands/Registry/UserContext", Assert.Single(plan.Blockers).Kind);
+    }
+    [Theory] [InlineData("GENERIC_READ", true)] [InlineData("GENERIC_ALL", false)]
+    public void PermissionsAreRestrictedToKeyOnlyRead(string rights, bool supported)
+    {
+        var operation = new InstallOperation("Commands/Permission", $"<Permission><Path>HKEY_LOCAL_MACHINE\\SOFTWARE\\Test</Path><User>Everyone</User><PermissionValue>{rights}</PermissionValue></Permission>");
+        var plan = WindowsInstallPlanner.Create(Inspect(operation), Variables, "en_US");
+        Assert.Equal(supported ? 1 : 0, plan.Permissions!.Count); Assert.Single(plan.Blockers); Assert.False(plan.CanExecute);
+        if (supported) { Assert.Equal("None", plan.Permissions[0].Inheritance); Assert.Equal("S-1-1-0", plan.Permissions[0].Sid); }
     }
 }

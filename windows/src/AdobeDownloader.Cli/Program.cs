@@ -9,7 +9,7 @@ static async Task<int> RunAsync(string[] args)
     if (args.Length == 0 || args[0] is "--help" or "-h")
     {
         Console.WriteLine("""
-            Flash Creative — Windows CLI (installation development)
+            Flash Creative â€” Windows CLI (installation development)
             catalog [--product KBRG] [--platform win64] [--channel ccm] [--json]
             manifest --product KBRG --version 16.0.7.36 [--locale en_US] [--out manifest.json]
             download --product CODE --version EXACT --package NAME --out DIRECTORY
@@ -18,6 +18,7 @@ static async Task<int> RunAsync(string[] args)
                  [--platform win64] [--channel ccm] [--modules ID,SAP:ID] [--features NAME,SAP:NAME]
                  [--deployment individual|enterprise]
             inspect-delta --plan plan.json --product CODE --package NAME --base-version EXACT [--archive delta.zip] [--out report.json]
+            stage-install --plan plan.json --product CODE --package NAME --archive package.zip --variables paths.json --destination stage --max-bytes 5000000000
             plan-install --plan plan.json --product CODE --package NAME --archive package.zip --variables paths.json --out install-plan.json
             inspect-install --plan plan.json --product CODE --package NAME --archive package.zip [--out report.json]
             stage-delta --plan target.json --baseline-plan old.json --product CODE --package NAME
@@ -45,9 +46,10 @@ static async Task<int> RunAsync(string[] args)
     try
     {
         var command = args[0];
-        if (command is not ("catalog" or "manifest" or "download" or "plan" or "queue-create" or "queue-run" or "queue-status" or "queue-audit" or "verify-signature" or "inspect-delta" or "stage-delta" or "inspect-install" or "plan-install"))
+        if (command is not ("catalog" or "manifest" or "download" or "plan" or "queue-create" or "queue-run" or "queue-status" or "queue-audit" or "verify-signature" or "inspect-delta" or "stage-delta" or "inspect-install" or "plan-install" or "stage-install"))
             throw new ArgumentException("Unknown command; use --help.");
         var options = ParseOptions(args[1..]);
+        if (command == "stage-install") return await StageInstallCommandAsync(options, cancellation.Token);
         if (command == "plan-install") return await PlanInstallCommandAsync(options, cancellation.Token);
         if (command == "inspect-install") return await InspectInstallCommandAsync(options, cancellation.Token);
         if (command == "stage-delta") return await StageDeltaCommandAsync(options, cancellation.Token);
@@ -157,6 +159,22 @@ static async Task<int> RunAsync(string[] args)
         return 1;
     }
     finally { Console.CancelKeyPress -= cancel; }
+}
+
+static async Task<int> StageInstallCommandAsync(Dictionary<string, string> options, CancellationToken ct)
+{
+    string Require(string name) => options.GetValueOrDefault(name) ?? throw new ArgumentException($"--{name} is required.");
+    string[] allowed = ["plan", "product", "package", "archive", "variables", "destination", "max-bytes"];
+    if (options.Keys.Any(k => !allowed.Contains(k))) throw new ArgumentException("Invalid stage-install option; use --help.");
+    if (!long.TryParse(Require("max-bytes"), out var limit) || limit <= 0) throw new ArgumentException("--max-bytes must be positive.");
+    var plan = await JsonFiles.ReadAsync<DownloadPlan>(Require("plan"), ct);
+    var variables = await JsonFiles.ReadAsync<Dictionary<string, string>>(Require("variables"), ct);
+    using var http = AdobeTransport.CreateHttpClient();
+    var result = await new InstallStager(new AdobeTransport(http)).StageAsync(plan, Require("product"), Require("package"),
+        Require("archive"), variables, Require("destination"), limit, ct);
+    Console.WriteLine(JsonSerializer.Serialize(new { result.Plan.Product, result.Plan.Package, Files = result.Files.Count,
+        result.Bytes, result.Installed, InstallationBlockers = result.Plan.Blockers.Count }, JsonFiles.Options));
+    return 0;
 }
 
 static async Task<int> PlanInstallCommandAsync(Dictionary<string, string> options, CancellationToken ct)

@@ -207,3 +207,51 @@ existing settings, edited content/attributes, partial Prepared state, invalid sc
 and cancellation. All 260 local tests pass; no existing Adobe folders were changed.
 Implementation follows Microsoft's desktop.ini folder customization guidance:
 https://learn.microsoft.com/en-us/windows/win32/shell/how-to-customize-folders-with-desktop-ini
+
+
+## Integrated staging and unprivileged recovery (2026-09-27)
+
+Full-package `stage-install` now refreshes the Adobe manifest and segment hashes while
+holding the archive against writes, validates the asset map, and decodes ZIP/ZIP-LZMA2
+payloads into a new staging directory. It limits decoded bytes and decoder dictionaries,
+records per-file SHA-256 and decoded sizes, and publishes the directory only on success.
+Receipts remain inventory, not elevated authorization. Unsupported command blockers remain.
+A live Bridge 16.0.6.9 run staged 2,549 files / 2,792,681,610 bytes under `.local/`.
+No installation paths were written. The eight remaining blockers now concern execution
+integration rather than silently unrecognized Bridge commands.
+
+WindowsShortcut creates real links on an STA thread through IShellLinkW/IPersistFile,
+reloads its own generated link without Resolve, verifies target/working directory/empty
+arguments, and returns a staged hash. FileTransaction can publish and roll back new links.
+Tests include spaces and Unicode. No target is launched.
+
+Registry preferences use an explicit port policy, not a claim about undocumented Adobe
+flags: initialize absent values only, preserve existing values, and retain preferences
+on uninstall. Recursive-delete requests are retained for audit but never enacted.
+RegistryPlanCompiler binds HKCU to the initiating process SID and an explicit owned scope.
+RegistryTransaction now distinguishes failed-install rollback from uninstall and journals
+Uninstalling before mutations, preserving preferences even after an interrupted uninstall.
+
+RegistryPermissionTransaction supports an additive, non-inheriting Everyone/ReadKey ACE
+on an existing owned key. It snapshots/restores DACL rules and protection, preserving
+conflicting edits. Windows may change the auto-inherited bookkeeping bit; equivalence
+ignores only that bit, not ACEs, masks, identities, ordering, or protection. Permission
+manifest planning accepts only this narrow operation; machine execution stays blocked.
+All ACL mutation tests use unique HKCU test subtrees.
+
+DirectoryTransaction records newly created directories and removes only recorded empty
+directories during recovery. InstallationTransaction coordinates directories, new files,
+registry values, permissions, and icons with durable parent/child journals. It reverses
+completed/partially started steps, skips already-recovered children, detects missing
+completed journals, and binds recovery to the expected work fingerprint. It is restricted
+to caller-owned roots, new-file installs, and current-user registry scopes. It cannot
+launch executables or perform elevated/machine installation. Its journals remain trusted
+local state, and it is not hardened against hostile writers or overlapping sessions.
+
+Validation at this checkpoint: 294 local tests pass. Isolated fixtures exercise complete
+apply/rollback/uninstall, late failure, interrupted parent recovery, missing child journals,
+and preserving user changes. Windows Sandbox/Hyper-V are not available on this host;
+actual Adobe install/launch validation remains outstanding. Phase three is not complete.
+
+References: [Windows shell links](https://learn.microsoft.com/en-us/windows/win32/shell/links),
+[registry security](https://learn.microsoft.com/en-us/windows/win32/sysinfo/registry-key-security-and-access-rights).
