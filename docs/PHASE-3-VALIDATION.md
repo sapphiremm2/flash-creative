@@ -146,3 +146,25 @@ Microsoft references: [HKCR and explicit machine/user Classes stores](https://le
 [alternate registry views](https://learn.microsoft.com/en-us/windows/win32/winprog64/accessing-an-alternate-registry-view).
 
 No experiments may use the user's existing Adobe installation as a test target.
+
+
+## Shell and initiating-user preview follow-up
+
+The planner now emits typed Shortcut and FolderIcon records. Shortcut names require
+an exact locale and safe filename; targets and destinations require explicit absolute
+root variables. Unknown fields, duplicate fields/locales/destinations, traversal,
+device names, and alternate data streams are rejected. Folder icons currently accept
+ICO paths only. Both operations retain explicit recovery blockers: no shell artifacts
+are created, and their targets are not yet checked against the verified file map.
+
+Plain HKCU values now carry the current process user's SID, captured through
+WindowsIdentity rather than installation variables. A UserContext blocker remains
+until execution validates that identity and the loaded user hive. This is a preview
+captured in the initiating process, not an authorization token for an elevated helper.
+Registry preference/recursive-delete attributes and Permission instructions still
+block. No original eight Bridge execution blockers are claimed resolved by this work.
+
+Validation: Release build has zero warnings/errors; all 246 local tests pass.
+Eleven additional cases cover shell parsing, unsafe names, locale selection,
+duplicate/unknown fields, initiating-user identity, and retained preference blockers.
+No Adobe applications, shell artifacts, or production registry keys were changed.

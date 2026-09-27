@@ -5,13 +5,16 @@ using System.Xml.Linq;
 namespace AdobeDownloader.Core;
 
 public sealed record PlannedAsset(string Source, string Target, bool Recursive, bool Ignored);
-public sealed record PlannedRegistryValue(string Hive, string Key, string View, string Name, string Type, string Data);
+public sealed record PlannedRegistryValue(string Hive, string Key, string View, string Name, string Type, string Data, string? OwnerSid = null);
+public sealed record PlannedShortcut(string Target, string LinkPath);
+public sealed record PlannedFolderIcon(string FolderPath, string IconPath);
 public sealed record PlannedAssetFile(string ArchiveEntry, string Target, long ArchiveEntryBytes);
 public sealed record InstallPlanBlocker(int? Operation, string Kind, string Reason);
 public sealed record WindowsInstallPlan(string Product, string Version, string Package, string ManifestSha256, string Locale,
     bool Applicable, IReadOnlyList<PlannedAsset> Assets, IReadOnlyList<PlannedRegistryValue> Registry,
     IReadOnlyList<InstallPlanBlocker> Blockers, bool CanExecute = false,
-    string DetachedSignatureStatus = "DeferredUnverified", bool RequireExecutablePublisherVerification = true, IReadOnlyList<PlannedAssetFile>? Files = null, IReadOnlyList<string>? Directories = null);
+    string DetachedSignatureStatus = "DeferredUnverified", bool RequireExecutablePublisherVerification = true, IReadOnlyList<PlannedAssetFile>? Files = null, IReadOnlyList<string>? Directories = null,
+    IReadOnlyList<PlannedShortcut>? Shortcuts = null, IReadOnlyList<PlannedFolderIcon>? FolderIcons = null);
 
 /// <summary>Compiles a reviewable subset. Never executes operations or treats a saved report as authorization.</summary>
 public static class WindowsInstallPlanner
@@ -38,6 +41,7 @@ public static class WindowsInstallPlanner
         var blockers = manifest.UnknownElements.Where(x => x.StartsWith("Package", StringComparison.Ordinal) || x.Contains("/@"))
             .Select(x => new InstallPlanBlocker(null, x, "Unsupported manifest section or attribute.")).ToList();
         var assets = new List<PlannedAsset>(); var registry = new List<PlannedRegistryValue>();
+        var shortcuts = new List<PlannedShortcut>(); var folderIcons = new List<PlannedFolderIcon>();
         var applicable = true;
         try { applicable = PackageConditions.Evaluate(manifest.Condition, values); }
         catch (InvalidDataException ex) { applicable = false; blockers.Add(new(null, "Condition", ex.Message)); }
@@ -84,7 +88,14 @@ public static class WindowsInstallPlanner
                     var hive = path[..separator]; var key = path[(separator + 1)..];
                     // A machine install uses the explicit machine Classes store, never merged HKCR.
                     if (hive == "HKEY_CLASSES_ROOT") { hive = "HKEY_LOCAL_MACHINE"; key = "Software\\Classes\\" + key; }
-                    if (hive != "HKEY_LOCAL_MACHINE") throw new InvalidDataException("Only machine registry targets are currently planned.");
+                    if (hive is not ("HKEY_LOCAL_MACHINE" or "HKEY_CURRENT_USER")) throw new InvalidDataException("Unsupported registry hive.");
+                    // Capture the initiating process identity, never a downloaded variable or the future elevated helper's HKCU.
+                    string? ownerSid = null;
+                    if (hive == "HKEY_CURRENT_USER")
+                    {
+                        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+                        ownerSid = identity.User?.Value ?? throw new InvalidDataException("Initiating user SID is unavailable.");
+                    }
                     if (key.Split('\\').Any(c => c.Length == 0 || c is "." or "..") || key.Contains('\0')) throw new InvalidDataException("Invalid registry subkey.");
                     var name = Resolve(Scalar("Name")); if (name == "Default") name = "";
                     var type = Scalar("Type");
@@ -115,7 +126,56 @@ public static class WindowsInstallPlanner
                         if (existing.Type == type && existing.Data == data) continue;
                         throw new InvalidDataException("Conflicting registry value target.");
                     }
-                    registry.Add(new(hive, key, view, name, type, data));
+                    registry.Add(new(hive, key, view, name, type, data, ownerSid));
+                    if (ownerSid is not null)
+                        blockers.Add(new(index, "Commands/Registry/UserContext", "Execution must bind this SID to the initiating user and validate its loaded hive; elevated HKCU is not a substitute."));
+                }
+                else if (operation.Kind is "Commands/Shortcut" or "Commands/FolderIcon")
+                {
+                    var shortcut = operation.Kind == "Commands/Shortcut";
+                    var fields = shortcut ? new[] { "Target", "Directory", "Name" } : new[] { "FolderPath", "IconPath" };
+                    if (element.Name != (shortcut ? "Shortcut" : "FolderIcon") || element.HasAttributes ||
+                        element.Elements().Any(e => !fields.Contains(e.Name.LocalName) || e.Name.Namespace != XNamespace.None))
+                        throw new InvalidDataException("Unsupported shell instruction fields.");
+                    XElement Field(string name)
+                    {
+                        var matches = element.Elements(name).ToArray();
+                        if (matches.Length != 1 || matches[0].HasAttributes) throw new InvalidDataException("Missing or duplicate shell field.");
+                        return matches[0];
+                    }
+                    string Scalar(string name)
+                    {
+                        var field = Field(name);
+                        if (field.HasElements) throw new InvalidDataException("Unexpected nested shell field.");
+                        return field.Value;
+                    }
+                    if (shortcut)
+                    {
+                        var nameField = Field("Name");
+                        var languages = nameField.Elements().ToArray();
+                        if (languages.Length == 0 || nameField.Nodes().OfType<XText>().Any(t => !string.IsNullOrWhiteSpace(t.Value)) ||
+                            languages.Any(e => e.Name != "Language" || e.HasElements || e.Attributes().Count() != 1 || e.Attribute("locale") is null) ||
+                            languages.Select(e => e.Attribute("locale")!.Value).Distinct().Count() != languages.Length)
+                            throw new InvalidDataException("Invalid localized shortcut name.");
+                        var name = Resolve(languages.SingleOrDefault(e => e.Attribute("locale")!.Value == locale)?.Value
+                            ?? throw new InvalidDataException("Shortcut has no exact locale match."));
+                        PackageDownloader.ValidateFileName(name);
+                        var link = Path.Combine(ResolvePath(Scalar("Directory")), name + ".lnk");
+                        var target = ResolvePath(Scalar("Target"));
+                        if (shortcuts.Any(s => s.LinkPath.Equals(link, StringComparison.OrdinalIgnoreCase)))
+                            throw new InvalidDataException("Duplicate shortcut destination.");
+                        shortcuts.Add(new(target, link));
+                    }
+                    else
+                    {
+                        var folder = ResolvePath(Scalar("FolderPath"));
+                        var icon = ResolvePath(Scalar("IconPath"));
+                        if (!icon.EndsWith(".ico", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Only ICO folder icons are supported.");
+                        if (folderIcons.Any(i => i.FolderPath.Equals(folder, StringComparison.OrdinalIgnoreCase)))
+                            throw new InvalidDataException("Duplicate folder icon destination.");
+                        folderIcons.Add(new(folder, icon));
+                    }
+                    blockers.Add(new(index, operation.Kind + "/Recovery", "Shell operation requires artifact validation and metadata-preserving recovery before execution."));
                 }
                 else throw new InvalidDataException(operation.Kind == "Commands/RunProgram"
                     ? "Program execution requires a publisher allowlist, exit/reboot handling, and execution-time signature verification."
@@ -124,7 +184,7 @@ public static class WindowsInstallPlanner
             catch (Exception ex) when (ex is InvalidDataException or XmlException or ArgumentException or NotSupportedException)
             { blockers.Add(new(index, operation.Kind, ex.Message)); }
         }
-        return new(inspection.Product, inspection.ProductVersion, manifest.Package, manifest.ManifestSha256, locale, applicable, assets, registry, blockers);
+        return new(inspection.Product, inspection.ProductVersion, manifest.Package, manifest.ManifestSha256, locale, applicable, assets, registry, blockers, Shortcuts: shortcuts, FolderIcons: folderIcons);
 
         string Resolve(string text)
         {
