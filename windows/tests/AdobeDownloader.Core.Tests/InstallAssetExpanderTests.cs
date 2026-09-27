@@ -64,4 +64,41 @@ public class InstallAssetExpanderTests
         stream.Position = 0;
         Assert.Throws<InvalidDataException>(() => InstallAssetExpander.Expand(Plan(Asset("", "")), stream, @"C:\Stage"));
     }
+    [Fact] public void ShellTargetsResolveAgainstMappedPayloadWithoutCreatingArtifacts()
+    {
+        using var zip = Zip("1/app.exe", "1/app.ico");
+        var plan = Plan(Asset("", "")) with {
+            Shortcuts = [new(@"C:\Target\APP.exe", @"C:\Links\App.lnk")],
+            FolderIcons = [new(@"C:\Target", @"C:\Target\app.ico")] };
+        var result = InstallAssetExpander.Expand(plan, zip, @"C:\Stage");
+        Assert.Empty(result.Blockers); Assert.False(result.CanExecute); Assert.Equal(2, result.Files!.Count);
+    }
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public void MissingAndIgnoredShellTargetsAreBlocked(bool ignored)
+    {
+        using var zip = Zip("1/app.exe", "1/app.ico");
+        var plan = Plan(Asset("", "", ignored: ignored)) with {
+            Shortcuts = [new(@"C:\Target\missing.exe", @"C:\Links\App.lnk")],
+            FolderIcons = [new(@"C:\Missing", @"C:\Target\missing.ico")] };
+        var result = InstallAssetExpander.Expand(plan, zip, @"C:\Stage");
+        Assert.Equal(2, result.Blockers.Count(b => b.Kind == "Shell/MissingTarget"));
+        Assert.Contains(result.Blockers, b => b.Kind == "Shell/MissingFolder");
+    }
+    [Theory] [InlineData("1/App.lnk", @"C:\Target\App.lnk")]
+    [InlineData("1/links", @"C:\Target\links\App.lnk")]
+    [InlineData("1/App.lnk/child", @"C:\Target\App.lnk")]
+    public void ShellArtifactsCannotOverwritePayloadOrRequiredDirectories(string entry, string link)
+    {
+        using var zip = Zip("1/app.exe", entry);
+        var plan = Plan(Asset("", "")) with { Shortcuts = [new(@"C:\Target\app.exe", link)] };
+        Assert.Contains(InstallAssetExpander.Expand(plan, zip, @"C:\Stage").Blockers, b => b.Kind == "Shell/Collision");
+    }
+    [Fact] public void DesktopIniPayloadAndGeneratedParentConflictsAreBlocked()
+    {
+        using var zip = Zip("1/app.exe", "1/app.ico", "1/Desktop.INI");
+        var plan = Plan(Asset("", "")) with {
+            Shortcuts = [new(@"C:\Target\app.exe", @"C:\Links\A.lnk"), new(@"C:\Target\app.exe", @"C:\Links\A.lnk\B.lnk")],
+            FolderIcons = [new(@"C:\Target", @"C:\Target\app.ico")] };
+        Assert.Equal(2, InstallAssetExpander.Expand(plan, zip, @"C:\Stage").Blockers.Count(b => b.Kind == "Shell/Collision"));
+    }
 }

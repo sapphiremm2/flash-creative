@@ -155,7 +155,8 @@ an exact locale and safe filename; targets and destinations require explicit abs
 root variables. Unknown fields, duplicate fields/locales/destinations, traversal,
 device names, and alternate data streams are rejected. Folder icons currently accept
 ICO paths only. Both operations retain explicit recovery blockers: no shell artifacts
-are created, and their targets are not yet checked against the verified file map.
+are created. The subsequent asset-expansion pass checks their targets against the
+verified file map.
 
 Plain HKCU values now carry the current process user's SID, captured through
 WindowsIdentity rather than installation variables. A UserContext blocker remains
@@ -168,3 +169,18 @@ Validation: Release build has zero warnings/errors; all 246 local tests pass.
 Eleven additional cases cover shell parsing, unsafe names, locale selection,
 duplicate/unknown fields, initiating-user identity, and retained preference blockers.
 No Adobe applications, shell artifacts, or production registry keys were changed.
+
+
+## Shell targets and generated-file collisions
+
+Asset expansion now requires shortcut targets and icon files to exist in the mapped
+payload, and folder-icon destinations to be mapped directories. Ignored payloads do
+not satisfy these checks. Generated shortcuts and desktop.ini destinations are checked
+case-insensitively against payload files, required directories, each other, and parent
+paths. An existing desktop.ini in the payload blocks rather than being overwritten.
+The shell operation count is bounded at 10,000. These checks do not inspect existing
+installed files or authorize execution; shell recovery blockers remain in place.
+
+Validation: 253 local tests pass, including seven new target/collision cases. No shell
+artifacts were created. Shortcut creation, desktop.ini merging, file attributes and
+ACL recovery, registry preferences/permissions, and elevation remain implementation work.

@@ -74,6 +74,39 @@ public static class InstallAssetExpander
         foreach (var (name, entry) in entries)
             if (name.StartsWith("1/", StringComparison.Ordinal) && !IsDirectory(entry) && !covered.Contains(name))
                 AddBlocker(new(null, "Assets/Unmapped", "Payload is not covered by any asset: " + name));
+        // Shell artifacts share the installation namespace with payload files and directories.
+        // Keep these checks read-only: successful mapping does not authorize COM or filesystem writes.
+        var generated = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var requiredDirectories = new HashSet<string>(directories, StringComparer.OrdinalIgnoreCase);
+        if ((plan.Shortcuts?.Count ?? 0) + (plan.FolderIcons?.Count ?? 0) > 10000)
+            throw new InvalidDataException("Shell operation limit exceeded.");
+        foreach (var shortcut in plan.Shortcuts ?? [])
+        {
+            if (!files.ContainsKey(shortcut.Target))
+                AddBlocker(new(null, "Shell/MissingTarget", "Shortcut target is not a mapped payload file: " + shortcut.Target));
+            AddGenerated(shortcut.LinkPath);
+        }
+        foreach (var icon in plan.FolderIcons ?? [])
+        {
+            if (!files.ContainsKey(icon.IconPath))
+                AddBlocker(new(null, "Shell/MissingTarget", "Folder icon is not a mapped payload file: " + icon.IconPath));
+            if (!directories.Contains(icon.FolderPath))
+                AddBlocker(new(null, "Shell/MissingFolder", "Icon folder is not a mapped payload directory: " + icon.FolderPath));
+            AddGenerated(Path.Combine(icon.FolderPath, "desktop.ini"));
+        }
+        foreach (var path in generated)
+            if (files.ContainsKey(path) || requiredDirectories.Contains(path))
+                AddBlocker(new(null, "Shell/Collision", "Generated shell artifact conflicts with an installation target: " + path));
+        void AddGenerated(string path)
+        {
+            if (!generated.Add(path)) AddBlocker(new(null, "Shell/Collision", "Multiple shell artifacts target " + path));
+            for (var parent = Path.GetDirectoryName(path); parent is not null; parent = Path.GetDirectoryName(parent))
+            {
+                if (files.ContainsKey(parent))
+                    AddBlocker(new(null, "Shell/Collision", "File occupies a shell artifact parent directory: " + parent));
+                requiredDirectories.Add(parent);
+            }
+        }
         return plan with { Files = files.Values.OrderBy(f => f.Target, StringComparer.OrdinalIgnoreCase).ToArray(),
             Directories = directories.Order(StringComparer.OrdinalIgnoreCase).ToArray(), Blockers = blockers, CanExecute = false };
         void AddBlocker(InstallPlanBlocker blocker)
