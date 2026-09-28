@@ -49,8 +49,18 @@ public static class WindowsSignatureVerifier
                 Path = pathPointer, Handle = file.SafeFileHandle.DangerousGetHandle() }, infoPointer, false);
             var status = WinVerifyTrust(new IntPtr(-1), ref action, ref data);
             if (status != 0) throw new InvalidDataException($"Windows signature verification failed (0x{unchecked((uint)status):X8}).");
-            using var embedded = X509Certificate.CreateFromSignedFile(path);
-            using var certificate = new X509Certificate2(embedded);
+            // Read the certificate from the successful trust evaluation itself, rather than independently
+            // extracting a certificate from the file (which may contain multiple signatures).
+            var provider = WTHelperProvDataFromStateData(data.StateData);
+            var signerPointer = provider == IntPtr.Zero ? IntPtr.Zero : WTHelperGetProvSignerFromChain(provider, 0, false, 0);
+            if (signerPointer == IntPtr.Zero) throw new InvalidDataException("Windows did not return a verified primary signer.");
+            var signer = Marshal.PtrToStructure<ProviderSigner>(signerPointer);
+            if (signer.Size < Marshal.SizeOf<ProviderSigner>() || signer.Error != 0 || signer.CertificateCount == 0 || signer.Certificates == IntPtr.Zero)
+                throw new InvalidDataException("Windows returned an invalid verified signer chain.");
+            var trusted = Marshal.PtrToStructure<ProviderCertificatePrefix>(signer.Certificates);
+            if (trusted.Size < Marshal.SizeOf<ProviderCertificatePrefix>() || trusted.Certificate == IntPtr.Zero)
+                throw new InvalidDataException("Windows did not return the verified signer certificate.");
+            using var certificate = new X509Certificate2(trusted.Certificate);
             var publisher = certificate.GetNameInfo(X509NameType.SimpleName, false);
             if (!publisher.Equals(expectedPublisher, StringComparison.Ordinal))
                 throw new InvalidDataException($"Signed publisher '{publisher}' differs from expected '{expectedPublisher}'.");
@@ -64,6 +74,24 @@ public static class WindowsSignatureVerifier
             Marshal.FreeCoTaskMem(pathPointer);
         }
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ProviderSigner
+    {
+        public uint Size, VerifyTimeLow, VerifyTimeHigh, CertificateCount;
+        public IntPtr Certificates;
+        public uint SignerType;
+        public IntPtr SignerInfo;
+        public uint Error, CounterSignerCount;
+        public IntPtr CounterSigners, ChainContext;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ProviderCertificatePrefix { public uint Size; public IntPtr Certificate; }
+    [DllImport("wintrust.dll", ExactSpelling = true)]
+    private static extern IntPtr WTHelperProvDataFromStateData(IntPtr state);
+    [DllImport("wintrust.dll", ExactSpelling = true)]
+    private static extern IntPtr WTHelperGetProvSignerFromChain(IntPtr provider, uint signer,
+        [MarshalAs(UnmanagedType.Bool)] bool counterSigner, uint counterIndex);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct FileInfo { public uint Size; public IntPtr Path, Handle, KnownSubject; }

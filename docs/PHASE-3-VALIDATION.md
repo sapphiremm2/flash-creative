@@ -303,3 +303,11 @@ counts and require all completed child journals before any reverse mutation. Thr
 additional cases pass (318 local tests total). The 315-test runtime/storage checkpoint
 passed native x64 and ARM64 CI:
 https://github.com/sapphiremm2/flash-creative/actions/runs/36466362606.
+
+
+Publisher binding follow-up: Authenticode identity is now read from the successful
+WinVerifyTrust provider's primary signer chain, rather than separately extracting a
+certificate from the file. Positive verification of the installed signed .NET host and
+the staged Microsoft runtime passes; a wrong expected publisher is rejected. All 319
+local tests pass. Provider structures follow Microsoft's CRYPT_PROVIDER_SGNR and
+CRYPT_PROVIDER_CERT definitions; native ARM64 CI validates the interop layout as well.
