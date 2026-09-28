@@ -68,6 +68,16 @@ an uncertain outcome: never automatically rerun the installer or report success.
 installation can affect shared components and cannot be reversed by deleting staged files.
 Cancellation after launch must not blindly kill an installer or trigger concurrent recovery.
 
+RuntimeExecutionJournal now implements this bookkeeping for trusted, unprivileged fixtures:
+Prepared -> LaunchIntent -> Started -> Completed. Writes flush before atomic replacement.
+Inspection binds the execution ID and executable digest, rejects contradictory or malformed
+records, and treats both incomplete launch states as requiring reconciliation. It never
+retries or kills a process, and a stored PID is not evidence of a currently running process.
+The launcher must await each journal write before its next side effect and keep tracking
+an already launched process independently of UI cancellation. Protected storage, peer
+authentication, actual process execution, and reliable reconciliation remain unimplemented.
+The current user's ability to edit this prototype journal prevents its privileged use.
+
 Record reboot-required and reboot-initiated outcomes separately from ordinary success.
 Do not automatically uninstall shared Microsoft runtimes during application removal.
 Ordinary failures and newer-version conflicts need an explicit dependency-resolution

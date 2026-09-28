@@ -320,3 +320,26 @@ inputs. It does not authenticate peers or authorize execution. Eight new cases p
 (327 local tests total). The owner confirmed no disposable Windows VM is currently
 available; final Adobe installation/launch acceptance remains outstanding, along with
 the authenticated privileged helper and actual runtime execution integration.
+
+## Disposable VM and runtime journal checkpoint (2026-09-28)
+
+The owner subsequently authorized creating a Windows VM on the external Toshiba drive.
+VirtualBox 7.2.20 is installed, and a Windows 11 Enterprise 25H2 evaluation guest is being
+installed under `D:\FlashCreative-VM`, with 8 GiB RAM, four virtual CPUs, and a dynamic
+100 GiB disk. Microsoft's complete ISO SHA-256 matched. UEFI, TPM 2.0, and Secure Boot
+are configured, with the unattended template's hardware-check bypasses removed.
+Guest installation and application acceptance are not yet complete. Reproduction and
+storage details are in [Windows VM validation](WINDOWS-VM-VALIDATION.md).
+
+The new guest-only `scripts/vm-smoke.ps1` captures environment evidence, CLI startup,
+and fresh runtime preparation without executing an installer. PowerShell parsing and
+host rejection were checked locally: a nonmatching host exits before creating output.
+A self-contained x64 CLI bundle and reviewed runtime inputs are ready for guest transfer.
+
+RuntimeExecutionJournal adds durable launch intent, process identity, and exit records
+to the unprivileged prototype. Incomplete launch states require reconciliation and never
+permit automatic retry. Completion preserves ordinary failures, reboot-required, and
+reboot-initiated results. Tests cover interrupted states, cancellation, wrong execution
+identity/digest, contradictory records, duplicate/unknown fields, and oversized input.
+The Release build is clean and all 343 local tests pass. This journal does not launch
+processes or authenticate recovery input; privileged integration remains outstanding.
