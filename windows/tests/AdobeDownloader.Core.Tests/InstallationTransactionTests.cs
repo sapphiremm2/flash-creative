@@ -52,6 +52,24 @@ public class InstallationTransactionTests : IDisposable
         await Assert.ThrowsAsync<InvalidDataException>(() => InstallationTransaction.RollbackAsync(work, Journal));
         File.Move(child + ".saved", child); await InstallationTransaction.RollbackAsync(work, Journal);
     }
+    [Theory] [InlineData("Committed")] [InlineData("Prepared")]
+    public async Task ContradictoryParentStateCannotTriggerRecovery(string state)
+    {
+        var work = await Work(); await InstallationTransaction.ApplyAsync(work, Journal);
+        var path = Path.Combine(Journal, "installation.json"); var journal = await JsonFiles.ReadAsync<InstallationJournal>(path);
+        await JsonFiles.WriteAsync(path, journal with { State = state, StartedSteps = 1, CompletedSteps = 1 });
+        await Assert.ThrowsAsync<InvalidDataException>(() => InstallationTransaction.RollbackAsync(work, Journal));
+        Assert.True(File.Exists(Path.Combine(Target, "app", "desktop.ini"))); Assert.NotNull(RegistryTransaction.Read(scope, "", "ordinary"));
+        await JsonFiles.WriteAsync(path, journal); await InstallationTransaction.RollbackAsync(work, Journal);
+    }
+    [Fact] public async Task MissingEarlyChildIsDetectedBeforeAnyReverseStepRuns()
+    {
+        var work = await Work(); await InstallationTransaction.ApplyAsync(work, Journal);
+        var path = Path.Combine(Journal, "0000", "directories.json"); File.Move(path, path + ".saved");
+        await Assert.ThrowsAsync<InvalidDataException>(() => InstallationTransaction.RollbackAsync(work, Journal));
+        Assert.True(File.Exists(Path.Combine(Target, "app", "desktop.ini"))); Assert.NotNull(RegistryTransaction.Read(scope, "", "ordinary"));
+        File.Move(path + ".saved", path); await InstallationTransaction.RollbackAsync(work, Journal);
+    }
     public void Dispose()
     {
         Registry.CurrentUser.DeleteSubKeyTree(scope.Root);

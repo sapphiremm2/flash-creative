@@ -55,6 +55,15 @@ public static class InstallationTransaction
         if (journal.Version != 1 || journal.WorkSha256 != Fingerprint(work) || journal.State is not ("Prepared" or "Applying" or "Committed" or "RollingBack" or "RolledBack" or "Uninstalling" or "Uninstalled") ||
             journal.StartedSteps < 0 || journal.StartedSteps > steps.Count || journal.CompletedSteps < 0 || journal.CompletedSteps > journal.StartedSteps || journal.StartedSteps - journal.CompletedSteps > 1)
             throw new InvalidDataException("Installation journal does not match the expected work.");
+        if ((journal.State == "Prepared" && (journal.StartedSteps != 0 || journal.CompletedSteps != 0)) ||
+            (journal.State is "Committed" or "Uninstalling" or "Uninstalled" && (journal.StartedSteps != steps.Count || journal.CompletedSteps != steps.Count)))
+            throw new InvalidDataException("Installation state contradicts its completed step count.");
+        // Check every completed child before any recovery mutation, even if it is late in reverse order.
+        for (var index = 0; index < journal.CompletedSteps; index++)
+        {
+            FileTransaction.NoLinks(steps[index].Journal);
+            if (!File.Exists(steps[index].Journal)) throw new InvalidDataException("Completed installation step is missing its recovery journal.");
+        }
         if (uninstall && journal.State is not ("Committed" or "Uninstalling" or "Uninstalled")) throw new InvalidDataException("Only a committed installation can be uninstalled.");
         if (journal.State is "RolledBack" or "Uninstalled") return;
         uninstall |= journal.State == "Uninstalling";

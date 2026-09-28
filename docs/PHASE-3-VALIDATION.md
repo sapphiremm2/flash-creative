@@ -296,3 +296,10 @@ failed-verification cleanup, concurrent-session cancellation, private ACL inheri
 and runtime rejection cases. The previous 294-test integration checkpoint passed native
 x64 and ARM64 CI: https://github.com/sapphiremm2/flash-creative/actions/runs/36340251122.
 No Adobe app or Microsoft runtime was executed on this host.
+
+
+Recovery follow-up: parent journals now reject contradictory Prepared/Committed step
+counts and require all completed child journals before any reverse mutation. Three
+additional cases pass (318 local tests total). The 315-test runtime/storage checkpoint
+passed native x64 and ARM64 CI:
+https://github.com/sapphiremm2/flash-creative/actions/runs/36466362606.
