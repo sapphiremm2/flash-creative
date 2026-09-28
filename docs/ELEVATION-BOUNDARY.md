@@ -1,10 +1,19 @@
 # Phase-three privileged installation boundary
 
-Status: implementation pending. The current transaction helpers are unprivileged
+Status: bounded request codec implemented; authenticated transport and privileged execution
+pending. The current transaction helpers are unprivileged
 prototypes. This document defines the next boundary; it does not authorize those
 helpers to run elevated or claim that a secure helper exists.
 
 ## Request and identity
+
+InstallationRequestCodec implements a 64 KiB, depth-limited, versioned selection-only
+format. It rejects unknown/duplicate JSON fields, missing fields, duplicate archive
+identities, invalid identifiers/locales/platforms, and excessive declared input sizes.
+No paths, publishers, user identity claims, operation lists, or caller hashes are accepted.
+These checks are parsing only: the helper still must authenticate peers, prevent replay,
+and independently verify all metadata and archive contents. No transport or elevation
+entry point currently consumes this codec.
 
 The helper accepts a product/version/platform/locale selection and bounded archive
 inputs. It must not accept executable paths, publisher names, command lines, arbitrary

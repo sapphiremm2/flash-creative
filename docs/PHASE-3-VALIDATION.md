@@ -311,3 +311,12 @@ certificate from the file. Positive verification of the installed signed .NET ho
 the staged Microsoft runtime passes; a wrong expected publisher is rejected. All 319
 local tests pass. Provider structures follow Microsoft's CRYPT_PROVIDER_SGNR and
 CRYPT_PROVIDER_CERT definitions; native ARM64 CI validates the interop layout as well.
+
+
+Elevation request-format checkpoint: InstallationRequestCodec now strictly parses a
+bounded selection-only request, rejecting additional privileged instructions, duplicate
+fields, missing values, unsupported versions, and invalid/duplicate/excessive archive
+inputs. It does not authenticate peers or authorize execution. Eight new cases pass
+(327 local tests total). The owner confirmed no disposable Windows VM is currently
+available; final Adobe installation/launch acceptance remains outstanding, along with
+the authenticated privileged helper and actual runtime execution integration.
