@@ -33,7 +33,8 @@ public sealed class InstallInspector(AdobeTransport transport)
             ?? throw new InvalidDataException("Package is absent from Adobe's current manifest.");
         if (package.Url != download.Package.Url || package.DownloadSize != download.Package.DownloadSize)
             throw new InvalidDataException("Saved plan differs from Adobe's current manifest.");
-        await using var file = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var archiveLease = LockedWindowsFile.Open(archivePath);
+        var file = archiveLease.Stream;
         var verified = await new AdobePackageVerifier(transport).VerifyAsync(package, archivePath, ct);
         using var archive = new ZipArchive(file, ZipArchiveMode.Read, leaveOpen: true);
         if (archive.Entries.Count > 100000) throw new InvalidDataException("Archive entry limit exceeded.");

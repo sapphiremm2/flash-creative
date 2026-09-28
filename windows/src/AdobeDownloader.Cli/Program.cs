@@ -18,6 +18,7 @@ static async Task<int> RunAsync(string[] args)
                  [--platform win64] [--channel ccm] [--modules ID,SAP:ID] [--features NAME,SAP:NAME]
                  [--deployment individual|enterprise]
             inspect-delta --plan plan.json --product CODE --package NAME --base-version EXACT [--archive delta.zip] [--out report.json]
+            prepare-runtime --plan plan.json --archive runtime.zip --destination new-runtime-stage
             stage-install --plan plan.json --product CODE --package NAME --archive package.zip --variables paths.json --destination stage --max-bytes 5000000000
             plan-install --plan plan.json --product CODE --package NAME --archive package.zip --variables paths.json --out install-plan.json
             inspect-install --plan plan.json --product CODE --package NAME --archive package.zip [--out report.json]
@@ -46,9 +47,10 @@ static async Task<int> RunAsync(string[] args)
     try
     {
         var command = args[0];
-        if (command is not ("catalog" or "manifest" or "download" or "plan" or "queue-create" or "queue-run" or "queue-status" or "queue-audit" or "verify-signature" or "inspect-delta" or "stage-delta" or "inspect-install" or "plan-install" or "stage-install"))
+        if (command is not ("catalog" or "manifest" or "download" or "plan" or "queue-create" or "queue-run" or "queue-status" or "queue-audit" or "verify-signature" or "inspect-delta" or "stage-delta" or "inspect-install" or "plan-install" or "stage-install" or "prepare-runtime"))
             throw new ArgumentException("Unknown command; use --help.");
         var options = ParseOptions(args[1..]);
+        if (command == "prepare-runtime") return await PrepareRuntimeCommandAsync(options, cancellation.Token);
         if (command == "stage-install") return await StageInstallCommandAsync(options, cancellation.Token);
         if (command == "plan-install") return await PlanInstallCommandAsync(options, cancellation.Token);
         if (command == "inspect-install") return await InspectInstallCommandAsync(options, cancellation.Token);
@@ -161,6 +163,19 @@ static async Task<int> RunAsync(string[] args)
     finally { Console.CancelKeyPress -= cancel; }
 }
 
+static async Task<int> PrepareRuntimeCommandAsync(Dictionary<string, string> options, CancellationToken ct)
+{
+    string Require(string name) => options.GetValueOrDefault(name) ?? throw new ArgumentException($"--{name} is required.");
+    string[] allowed = ["plan", "archive", "destination"];
+    if (options.Keys.Any(k => !allowed.Contains(k))) throw new ArgumentException("Invalid prepare-runtime option; use --help.");
+    var plan = await JsonFiles.ReadAsync<DownloadPlan>(Require("plan"), ct);
+    using var http = AdobeTransport.CreateHttpClient();
+    using var runtime = await new RuntimeInstallerPreparation(new AdobeTransport(http)).PrepareAsync(plan, Require("archive"), Require("destination"), ct);
+    Console.WriteLine(JsonSerializer.Serialize(new { runtime.Policy, runtime.Signature, runtime.Sha256, Executed = false,
+        Note = "Verification lease is released when this command returns; later execution must reverify." }, JsonFiles.Options));
+    return 0;
+}
+
 static async Task<int> StageInstallCommandAsync(Dictionary<string, string> options, CancellationToken ct)
 {
     string Require(string name) => options.GetValueOrDefault(name) ?? throw new ArgumentException($"--{name} is required.");
@@ -173,7 +188,7 @@ static async Task<int> StageInstallCommandAsync(Dictionary<string, string> optio
     var result = await new InstallStager(new AdobeTransport(http)).StageAsync(plan, Require("product"), Require("package"),
         Require("archive"), variables, Require("destination"), limit, ct);
     Console.WriteLine(JsonSerializer.Serialize(new { result.Plan.Product, result.Plan.Package, Files = result.Files.Count,
-        result.Bytes, result.Installed, InstallationBlockers = result.Plan.Blockers.Count }, JsonFiles.Options));
+        Resources = result.Resources?.Count, result.Bytes, result.Installed, InstallationBlockers = result.Plan.Blockers.Count }, JsonFiles.Options));
     return 0;
 }
 

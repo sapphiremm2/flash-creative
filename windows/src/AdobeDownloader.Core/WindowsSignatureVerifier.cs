@@ -5,6 +5,14 @@ namespace AdobeDownloader.Core;
 
 public sealed record AuthenticodeResult(string Path, string Publisher, string Subject, string CertificateThumbprint);
 
+public sealed class VerifiedExecutableLease : IDisposable
+{
+    internal LockedWindowsFile File { get; }
+    public AuthenticodeResult Verification { get; }
+    internal VerifiedExecutableLease(LockedWindowsFile file, AuthenticodeResult verification) { File = file; Verification = verification; }
+    public void Dispose() => File.Dispose();
+}
+
 /// <summary>Verifies an embedded Windows signature. Does not execute files or verify ZIP archives.</summary>
 public static class WindowsSignatureVerifier
 {
@@ -12,9 +20,19 @@ public static class WindowsSignatureVerifier
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Authenticode verification requires Windows.");
         if (string.IsNullOrWhiteSpace(expectedPublisher)) throw new ArgumentException("An exact expected publisher is required.");
-        path = System.IO.Path.GetFullPath(path);
-        // Keep the file open without write/delete sharing throughout trust and identity checks.
-        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var lease = VerifyAndHold(path, expectedPublisher);
+        return lease.Verification;
+    }
+    public static VerifiedExecutableLease VerifyAndHold(string path, string expectedPublisher)
+    {
+        if (string.IsNullOrWhiteSpace(expectedPublisher)) throw new ArgumentException("An exact expected publisher is required.");
+        var file = LockedWindowsFile.Open(path);
+        try { return new(file, VerifyLocked(file, expectedPublisher)); }
+        catch { file.Dispose(); throw; }
+    }
+    private static AuthenticodeResult VerifyLocked(LockedWindowsFile locked, string expectedPublisher)
+    {
+        var path = locked.Path; var file = locked.Stream;
         var pathPointer = Marshal.StringToCoTaskMemUni(path);
         var infoPointer = Marshal.AllocHGlobal(Marshal.SizeOf<FileInfo>());
         var action = new Guid("00AAC56B-CD44-11d0-8CC2-00C04FC295EE");

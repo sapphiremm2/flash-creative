@@ -27,7 +27,7 @@ public static class RegistryPermissionTransaction
             InheritanceFlags.None, PropagationFlags.None, AccessControlType.Allow));
         var after = security.GetSecurityDescriptorSddlForm(AccessControlSections.Access);
         var journal = new RegistryPermissionJournal(1, scope, "Prepared", before, after);
-        Directory.CreateDirectory(journalDirectory);
+        PrivateStorage.CreateNewDirectory(journalDirectory);
         var path = Path.Combine(journalDirectory, "permission.json");
         await JsonFiles.WriteAsync(path, journal, overwrite: false, ct);
         try

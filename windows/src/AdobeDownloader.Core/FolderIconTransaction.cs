@@ -27,7 +27,7 @@ public static class FolderIconTransaction
         ct.ThrowIfCancellationRequested();
         var bytes = Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes("[.ShellClassInfo]\r\nIconFile=" + relative + "\r\nIconIndex=0\r\n")).ToArray();
         var journal = new FolderIconJournal(1, folder, "Prepared", File.GetAttributes(folder), Convert.ToHexString(SHA256.HashData(bytes)));
-        Directory.CreateDirectory(journalDirectory);
+        PrivateStorage.CreateNewDirectory(journalDirectory);
         var prepared = Path.Combine(journalDirectory, "desktop.ini.new");
         await using (var output = new FileStream(prepared, FileMode.CreateNew, FileAccess.Write, FileShare.None))
         { await output.WriteAsync(bytes, ct); await output.FlushAsync(ct); output.Flush(true); }

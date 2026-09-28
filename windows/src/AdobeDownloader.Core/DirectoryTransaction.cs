@@ -25,7 +25,7 @@ public static class DirectoryTransaction
             }
         }
         var journal = new DirectoryUndoJournal(1, root, "Prepared", created.OrderBy(p => p.Count(c => c == '\\')).ToArray());
-        Directory.CreateDirectory(journalDirectory);
+        PrivateStorage.CreateNewDirectory(journalDirectory);
         var journalPath = Path.Combine(journalDirectory, "directories.json");
         await JsonFiles.WriteAsync(journalPath, journal, overwrite: false, ct);
         try

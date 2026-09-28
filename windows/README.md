@@ -324,3 +324,14 @@ staged files plus `stage.json`. The destination must be new and its parent must 
 The explicit byte limit applies to decoded content. Installation blockers are retained;
 this command does not execute installers or modify installation destinations. Generated
 staging hashes are inventory and do not replace fresh Adobe verification on later use.
+
+
+### Runtime verification preparation
+
+`prepare-runtime --plan plan.json --archive runtime.zip --destination new-runtime-stage`
+
+Currently accepts only the reviewed VC14win64 2.0.0.2 package. It refreshes Adobe
+verification, stages the runtime, and checks its embedded signature against the fixed
+Microsoft Corporation publisher policy. It prints verification evidence without launching
+anything. Later execution must reverify; a saved report is not an execution capability.
+Full-package staging also retains ignored assets as Resources without installation targets.

@@ -4,9 +4,10 @@ using SharpCompress.Compressors.LZMA;
 
 namespace AdobeDownloader.Core;
 
+public sealed record StagedResourceFile(string RelativePath, string ArchiveEntry, long Bytes, string Sha256);
 public sealed record StagedInstallFile(string RelativePath, string Target, long Bytes, string Sha256);
 public sealed record InstallStageReceipt(int Version, WindowsInstallPlan Plan, VerificationResult Verification,
-    IReadOnlyList<StagedInstallFile> Files, long Bytes, bool Installed = false);
+    IReadOnlyList<StagedInstallFile> Files, long Bytes, bool Installed = false, IReadOnlyList<StagedResourceFile>? Resources = null, string CompressionType = "");
 
 /// <summary>Freshly verifies and decodes full-package assets into a NEW private staging directory.
 /// The receipt is inventory, not authorization for an elevated helper.</summary>
@@ -21,9 +22,11 @@ public sealed class InstallStager(AdobeTransport transport)
         if (Directory.Exists(destination) || File.Exists(destination)) throw new IOException("Stage destination must be new.");
         var parent = Path.GetDirectoryName(destination) ?? throw new InvalidDataException("Stage destination needs a parent.");
         if (!Directory.Exists(parent)) throw new InvalidDataException("Stage parent must already exist.");
-        await using var file = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var archiveLease = LockedWindowsFile.Open(archivePath);
+        var file = archiveLease.Stream;
         var inspection = await new InstallInspector(transport).InspectAsync(downloadPlan, product, package, archivePath, ct);
-        if (inspection.CompressionType is not ("zip" or "zip-lzma2")) throw new NotSupportedException("Unsupported package compression.");
+        var compression = inspection.CompressionType;
+        if (compression is not ("zip" or "zip-deflated" or "zip-lzma2")) throw new NotSupportedException("Unsupported package compression.");
         var values = new Dictionary<string, string>(variables) {
             ["OSVersion"] = downloadPlan.OsVersion, ["IsEnterpriseDeployment"] = downloadPlan.IsEnterpriseDeployment ? "true" : "false" };
         if (!values.TryGetValue("StagingFolder", out var stagingRoot)) throw new InvalidDataException("StagingFolder is required.");
@@ -35,20 +38,26 @@ public sealed class InstallStager(AdobeTransport transport)
         using var zip = new ZipArchive(file, ZipArchiveMode.Read, leaveOpen: true);
         var entries = zip.Entries.ToDictionary(e => e.FullName, StringComparer.Ordinal);
         var scratch = Path.Combine(parent, ".flash-install-stage-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(scratch);
+        PrivateStorage.CreateNewDirectory(scratch);
         try
         {
-            var staged = new List<StagedInstallFile>(); long total = 0;
-            foreach (var asset in plan.Files!)
+            var staged = new List<StagedInstallFile>(); var resources = new List<StagedResourceFile>(); long total = 0;
+            var mappedEntries = plan.Files!.Select(f => f.ArchiveEntry).ToHashSet(StringComparer.Ordinal);
+            // The expander rejects unmapped payloads; remaining entries are explicitly ignored install assets.
+            // Keep them as staged resources (e.g. VC runtime installers), never as application destinations.
+            var sources = plan.Files!.Select(f => (Entry: f.ArchiveEntry, Target: (string?)f.Target)).Concat(
+                entries.Values.Where(e => e.FullName.Replace('\\', '/').StartsWith("1/", StringComparison.Ordinal) && !e.FullName.EndsWith('/') && !e.FullName.EndsWith('\\') && !mappedEntries.Contains(e.FullName))
+                    .Select(e => (Entry: e.FullName, Target: (string?)null)));
+            foreach (var asset in sources)
             {
                 ct.ThrowIfCancellationRequested();
-                var entry = entries[asset.ArchiveEntry];
-                var relative = staged.Count.ToString("D6") + ".payload";
+                var entry = entries[asset.Entry];
+                var relative = (staged.Count + resources.Count).ToString("D6") + ".payload";
                 var outputPath = Path.Combine(scratch, relative);
                 using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
                 await using var output = new FileStream(outputPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
                 await using var encoded = entry.Open();
-                using var decoded = Decoder(encoded, entry.Length, inspection.CompressionType);
+                using var decoded = Decoder(encoded, entry.Length, compression);
                 var buffer = new byte[128 * 1024]; long length = 0;
                 while (true)
                 {
@@ -63,9 +72,11 @@ public sealed class InstallStager(AdobeTransport transport)
                     await output.WriteAsync(buffer.AsMemory(0, count), ct);
                 }
                 await output.FlushAsync(ct); output.Flush(true);
-                staged.Add(new(relative, asset.Target, length, Convert.ToHexString(hash.GetHashAndReset())));
+                var digest = Convert.ToHexString(hash.GetHashAndReset());
+                if (asset.Target is not null) staged.Add(new(relative, asset.Target, length, digest));
+                else resources.Add(new(relative, asset.Entry, length, digest));
             }
-            var receipt = new InstallStageReceipt(1, plan, inspection.Verification, staged, total);
+            var receipt = new InstallStageReceipt(1, plan, inspection.Verification, staged, total, Resources: resources, CompressionType: compression);
             await JsonFiles.WriteAsync(Path.Combine(scratch, "stage.json"), receipt, overwrite: false, ct);
             ct.ThrowIfCancellationRequested(); NoLinks(destination);
             Directory.Move(scratch, destination);
@@ -79,7 +90,7 @@ public sealed class InstallStager(AdobeTransport transport)
     }
     private static Stream Decoder(Stream encoded, long length, string compression)
     {
-        if (compression == "zip") return encoded;
+        if (compression is "zip" or "zip-deflated") return encoded;
         var property = encoded.ReadByte();
         if (property < 0 || property > 28) throw new InvalidDataException("Unsupported LZMA2 dictionary size.");
         try { return LzmaStream.Create([(byte)property], encoded, length - 1); }

@@ -255,3 +255,44 @@ actual Adobe install/launch validation remains outstanding. Phase three is not c
 
 References: [Windows shell links](https://learn.microsoft.com/en-us/windows/win32/shell/links),
 [registry security](https://learn.microsoft.com/en-us/windows/win32/sysinfo/registry-key-security-and-access-rights).
+
+
+## Runtime preparation and recovery hardening (2026-09-28)
+
+`prepare-runtime` performs fresh Adobe manifest/segment verification, validates the
+reviewed VC14win64 / 2.0.0.2 / VCRedist14-64 identity and exact PIMX command, extracts
+the ignored installer asset as a resource, and verifies Microsoft Corporation's
+embedded signature. The publisher and arguments come from a code-owned allowlist.
+Unknown versions, additional payloads, and changed arguments fail closed. The command
+never executes the runtime. The live 18,558,944-byte executable passed Authenticode:
+SHA-256 `8995548DFFFCDE7C49987029C764355612BA6850EE09A7B6F0FDDC85BDC5C280`.
+Adobe identifies this package as `zip-deflated`; staging now supports that explicit
+format alongside `zip` and `zip-lzma2`. Empty/unknown compression remains unsupported.
+
+LockedWindowsFile holds the file against writes/deletion and ancestor directory handles
+against rename. Reparse points are checked on the opened handles. Inspection/staging use
+this lease across archive verification/reading. VerifyAndHold returns a signature lease
+that remains alive through the caller's scope. prepare-runtime additionally checks that
+the executable bytes match the fresh staging digest. CLI output is diagnostic; the lease
+is released when the command exits and cannot authorize execution in a later process.
+
+The reviewed runtime policy classifies success, reboot-required, reboot-initiated, and
+failure exit codes. No launcher, durable launch/exit journal, or elevated runtime helper
+is enabled yet. Runtime policy and verification are prerequisites, not completed execution.
+
+InstallationSessionGate serializes participating coordinators for the current Windows
+user/session using a named mutex held by a dedicated owner thread. Cancellation while
+waiting does not execute work. Standalone transaction helpers and other Windows sessions
+are outside this cooperative gate; it is not a security boundary.
+
+New transaction journals and staging directories use protected ACLs granting access only
+to the current user, SYSTEM, and Administrators. Existing folders are not adopted. The
+current user can still alter these files: this improves privacy, not authenticity for an
+elevated helper. Journal authentication, privileged storage, and hostile-race hardening
+remain necessary before machine installation.
+
+Validation: Release build and 315 local tests pass, including held-file/ancestor locks,
+failed-verification cleanup, concurrent-session cancellation, private ACL inheritance,
+and runtime rejection cases. The previous 294-test integration checkpoint passed native
+x64 and ARM64 CI: https://github.com/sapphiremm2/flash-creative/actions/runs/36340251122.
+No Adobe app or Microsoft runtime was executed on this host.

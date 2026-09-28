@@ -15,7 +15,7 @@ public sealed record WindowsInstallPlan(string Product, string Version, string P
     bool Applicable, IReadOnlyList<PlannedAsset> Assets, IReadOnlyList<PlannedRegistryValue> Registry,
     IReadOnlyList<InstallPlanBlocker> Blockers, bool CanExecute = false,
     string DetachedSignatureStatus = "DeferredUnverified", bool RequireExecutablePublisherVerification = true, IReadOnlyList<PlannedAssetFile>? Files = null, IReadOnlyList<string>? Directories = null,
-    IReadOnlyList<PlannedShortcut>? Shortcuts = null, IReadOnlyList<PlannedFolderIcon>? FolderIcons = null, IReadOnlyList<PlannedRegistryPermission>? Permissions = null);
+    IReadOnlyList<PlannedShortcut>? Shortcuts = null, IReadOnlyList<PlannedFolderIcon>? FolderIcons = null, IReadOnlyList<PlannedRegistryPermission>? Permissions = null, IReadOnlyList<PlannedRuntimeInstaller>? Runtimes = null);
 
 /// <summary>Compiles a reviewable subset. Never executes operations or treats a saved report as authorization.</summary>
 public static class WindowsInstallPlanner
@@ -42,6 +42,7 @@ public static class WindowsInstallPlanner
         var blockers = manifest.UnknownElements.Where(x => x.StartsWith("Package", StringComparison.Ordinal) || x.Contains("/@"))
             .Select(x => new InstallPlanBlocker(null, x, "Unsupported manifest section or attribute.")).ToList();
         var assets = new List<PlannedAsset>(); var registry = new List<PlannedRegistryValue>();
+        var runtimes = new List<PlannedRuntimeInstaller>();
         var permissions = new List<PlannedRegistryPermission>();
         var shortcuts = new List<PlannedShortcut>(); var folderIcons = new List<PlannedFolderIcon>();
         var applicable = true;
@@ -136,6 +137,13 @@ public static class WindowsInstallPlanner
                     if (ownerSid is not null)
                         blockers.Add(new(index, "Commands/Registry/UserContext", "Execution must bind this SID to the initiating user and validate its loaded hive; elevated HKCU is not a substitute."));
                 }
+                else if (operation.Kind == "Commands/RunProgram")
+                {
+                    var runtime = RuntimeInstallerPolicy.Compile(inspection.Product, inspection.ProductVersion, manifest.Package, element);
+                    if (runtimes.Count != 0) throw new InvalidDataException("Duplicate runtime installation command.");
+                    runtimes.Add(runtime);
+                    blockers.Add(new(index, "Commands/RunProgram/Execution", "Reviewed runtime still requires fresh staging, held-file signature verification, elevation, and reboot-aware execution."));
+                }
                 else if (operation.Kind == "Commands/Permission")
                 {
                     if (element.Name != "Permission" || element.HasAttributes || element.Elements().Any(e => e.Name.Namespace != XNamespace.None || e.Name.LocalName is not ("Path" or "User" or "PermissionValue")))
@@ -209,7 +217,7 @@ public static class WindowsInstallPlanner
             catch (Exception ex) when (ex is InvalidDataException or XmlException or ArgumentException or NotSupportedException)
             { blockers.Add(new(index, operation.Kind, ex.Message)); }
         }
-        return new(inspection.Product, inspection.ProductVersion, manifest.Package, manifest.ManifestSha256, locale, applicable, assets, registry, blockers, Shortcuts: shortcuts, FolderIcons: folderIcons, Permissions: permissions);
+        return new(inspection.Product, inspection.ProductVersion, manifest.Package, manifest.ManifestSha256, locale, applicable, assets, registry, blockers, Shortcuts: shortcuts, FolderIcons: folderIcons, Permissions: permissions, Runtimes: runtimes);
 
         string Resolve(string text)
         {

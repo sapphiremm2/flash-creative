@@ -69,7 +69,7 @@ public static class RegistryTransaction
         // Also bounds serialized snapshots before creating registry state.
         if (JsonSerializer.SerializeToUtf8Bytes(journal, JsonFiles.Options).Length > 16 * 1024 * 1024)
             throw new InvalidDataException("Registry journal exceeds its size limit.");
-        Directory.CreateDirectory(journalDirectory);
+        PrivateStorage.CreateNewDirectory(journalDirectory);
         var path = Path.Combine(journalDirectory, "registry-journal.json");
         await JsonFiles.WriteAsync(path, journal, overwrite: false, ct);
         try

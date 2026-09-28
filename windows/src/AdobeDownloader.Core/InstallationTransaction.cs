@@ -16,14 +16,16 @@ public sealed record InstallationJournal(int Version, string WorkSha256, string 
 [SupportedOSPlatform("windows")]
 public static class InstallationTransaction
 {
-    public static async Task ApplyAsync(InstallationWork work, string journalDirectory, CancellationToken ct = default)
+    public static Task ApplyAsync(InstallationWork work, string journalDirectory, CancellationToken ct = default) =>
+        InstallationSessionGate.RunAsync(() => ApplyCore(work, journalDirectory, ct), ct);
+    private static async Task ApplyCore(InstallationWork work, string journalDirectory, CancellationToken ct)
     {
         journalDirectory = Validate(work, journalDirectory);
         if (Directory.Exists(journalDirectory) || File.Exists(journalDirectory)) throw new IOException("Installation journal must be new.");
         using var sessionLock = Lock(journalDirectory);
         var steps = Steps(work, journalDirectory); var path = Path.Combine(journalDirectory, "installation.json");
         var journal = new InstallationJournal(1, Fingerprint(work), "Prepared", 0, 0);
-        Directory.CreateDirectory(journalDirectory); await JsonFiles.WriteAsync(path, journal, overwrite: false, ct);
+        PrivateStorage.CreateNewDirectory(journalDirectory); await JsonFiles.WriteAsync(path, journal, overwrite: false, ct);
         try
         {
             for (var index = 0; index < steps.Count; index++)
@@ -39,8 +41,8 @@ public static class InstallationTransaction
         }
         catch { await Recover(work, journalDirectory, false, CancellationToken.None); throw; }
     }
-    public static Task RollbackAsync(InstallationWork work, string journalDirectory, CancellationToken ct = default) => RecoverLocked(work, journalDirectory, false, ct);
-    public static Task UninstallAsync(InstallationWork work, string journalDirectory, CancellationToken ct = default) => RecoverLocked(work, journalDirectory, true, ct);
+    public static Task RollbackAsync(InstallationWork work, string journalDirectory, CancellationToken ct = default) => InstallationSessionGate.RunAsync(() => RecoverLocked(work, journalDirectory, false, ct), ct);
+    public static Task UninstallAsync(InstallationWork work, string journalDirectory, CancellationToken ct = default) => InstallationSessionGate.RunAsync(() => RecoverLocked(work, journalDirectory, true, ct), ct);
     private static async Task RecoverLocked(InstallationWork work, string directory, bool uninstall, CancellationToken ct)
     {
         directory = Validate(work, directory); using var sessionLock = Lock(directory);

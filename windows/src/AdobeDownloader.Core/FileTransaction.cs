@@ -23,7 +23,7 @@ public static class FileTransaction
         if (paths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != paths.Length) throw new InvalidDataException("Duplicate transaction targets.");
         foreach (var replacement in replacements)
         { HashFormat(replacement.Sha256); if (replacement.ExpectedPreviousSha256 is not null) HashFormat(replacement.ExpectedPreviousSha256); }
-        Directory.CreateDirectory(journalDirectory);
+        PrivateStorage.CreateNewDirectory(journalDirectory);
         var entries = new List<FileUndoEntry>(); var journalPath = Path.Combine(journalDirectory, "journal.json");
         long used = 0;
         // Complete and flush every backup and replacement before publishing a recoverable journal.
