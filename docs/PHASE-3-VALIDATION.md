@@ -353,3 +353,10 @@ checkpoint passed native x64 and ARM64 CI:
 https://github.com/sapphiremm2/flash-creative/actions/runs/36500051146.
 Guest smoke evidence now includes existing VC runtime registry values in both registry
 views and hashes of the CLI, core assembly, and smoke script.
+
+The 347-test checkpoint also passed native x64 and ARM64 CI:
+https://github.com/sapphiremm2/flash-creative/actions/runs/36501036330.
+An untracked local continuation script waits for guest setup and Guest Additions to
+finish before taking a powered-off clean snapshot, transferring the test payload, and
+collecting preparation smoke evidence. At this checkpoint Windows setup is still in
+progress; neither the snapshot nor guest smoke results are claimed complete.

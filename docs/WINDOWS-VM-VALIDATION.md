@@ -41,6 +41,15 @@ again from the installed OS.
 
 ## Preparation smoke test
 
+The initial VM is a preparation/recovery test environment, not yet a qualified Bridge
+graphics environment. [Bridge 16 requirements](https://helpx.adobe.com/bridge/desktop/get-started/technical-requirements.html)
+include AVX2, 8 GB RAM, DirectX 11, 2 GB GPU memory, and a 1280 x 800 display.
+The initial VM configuration has 3D acceleration disabled and 128 MB virtual video RAM.
+Before interpreting application-launch results, inspect guest CPU and graphics support,
+enable and verify suitable graphics where available, and record any unmet requirements.
+VirtualBox advertises AVX2 in this VM's CPU log, but the installed guest must still be
+checked. Installer success alone does not establish graphics compatibility.
+
 Publish the current CLI with `dotnet publish`, Release, `win-x64`, self-contained.
 Copy the published directory to `cli` under a guest test-payload directory. Place
 the reviewed runtime download plan at `inputs\runtime-plan.json` and the original
@@ -54,7 +63,8 @@ and a new output directory. The script rejects a non-VirtualBox host or a differ
 guest UUID before creating output. Run with guest administrator rights so Windows
 can report Secure Boot and TPM state.
 
-The script captures OS/hardware evidence, CLI startup, and `prepare-runtime` results.
+The script captures OS/hardware evidence, existing VC runtime registry values in both
+views, hashes of the CLI/core/script, CLI startup, and `prepare-runtime` results.
 Preparation re-fetches Adobe verification metadata and checks the Windows signature
 and expected Microsoft publisher. A successful preparation is **not** installer
 execution or Adobe application validation. Copy results back to a local evidence
