@@ -22,6 +22,23 @@ if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) { throw 'Published CLI is
 $null = New-Item -ItemType Directory -Path $output
 
 $os = Get-CimInstance Win32_OperatingSystem
+$runtimeBaseline = foreach ($view in @('Registry64', 'Registry32')) {
+    $hive = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::$view)
+    try {
+        foreach ($architecture in @('x64', 'x86', 'arm64')) {
+            $key = $hive.OpenSubKey("SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\$architecture")
+            try {
+                [ordered]@{
+                    View = $view
+                    Architecture = $architecture
+                    Present = $null -ne $key
+                    Version = if ($null -ne $key) { $key.GetValue('Version') } else { $null }
+                    Installed = if ($null -ne $key) { $key.GetValue('Installed') } else { $null }
+                }
+            } finally { if ($null -ne $key) { $key.Dispose() } }
+        }
+    } finally { $hive.Dispose() }
+}
 $environment = [ordered]@{
     VmId = $identity.UUID
     Model = $machine.Model
@@ -32,9 +49,13 @@ $environment = [ordered]@{
     TpmPresent = (Get-Tpm).TpmPresent
     CapturedUtc = [DateTime]::UtcNow.ToString('o')
     CliSha256 = (Get-FileHash -LiteralPath $cli -Algorithm SHA256).Hash
+    CliAssemblySha256 = (Get-FileHash -LiteralPath (Join-Path $payload 'cli\AdobeDownloader.Cli.dll') -Algorithm SHA256).Hash
+    CoreAssemblySha256 = (Get-FileHash -LiteralPath (Join-Path $payload 'cli\AdobeDownloader.Core.dll') -Algorithm SHA256).Hash
+    SmokeScriptSha256 = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash
+    RuntimeBaseline = @($runtimeBaseline)
     InstallerExecuted = $false
 }
-$environment | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'environment.json') -Encoding UTF8
+$environment | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $output 'environment.json') -Encoding UTF8
 
 & $cli --help > (Join-Path $output 'cli-help.txt')
 if ($LASTEXITCODE -ne 0) { throw 'Published CLI could not start in the guest.' }

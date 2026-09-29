@@ -343,3 +343,13 @@ reboot-initiated results. Tests cover interrupted states, cancellation, wrong ex
 identity/digest, contradictory records, duplicate/unknown fields, and oversized input.
 The Release build is clean and all 343 local tests pass. This journal does not launch
 processes or authenticate recovery input; privileged integration remains outstanding.
+
+Append-only recovery follow-up: the runtime journal now retains its full four-state
+history in `runtime.jsonl`, using write-through and a disk flush instead of replacing
+the prior state file. Partial tails, missing record terminators, duplicate states, and
+changed process identities fail closed. The tests simulate damaged records; they do not
+claim physical power-loss validation. All 347 local tests pass. The earlier 343-test
+checkpoint passed native x64 and ARM64 CI:
+https://github.com/sapphiremm2/flash-creative/actions/runs/36500051146.
+Guest smoke evidence now includes existing VC runtime registry values in both registry
+views and hashes of the CLI, core assembly, and smoke script.

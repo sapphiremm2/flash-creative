@@ -69,7 +69,10 @@ installation can affect shared components and cannot be reversed by deleting sta
 Cancellation after launch must not blindly kill an installer or trigger concurrent recovery.
 
 RuntimeExecutionJournal now implements this bookkeeping for trusted, unprivileged fixtures:
-Prepared -> LaunchIntent -> Started -> Completed. Writes flush before atomic replacement.
+Prepared -> LaunchIntent -> Started -> Completed. Version-two records append to a bounded
+JSON-lines history with write-through and an explicit disk flush before returning.
+Incomplete tails are rejected rather than falling back to an earlier Prepared record;
+the complete sequence and process identity continuity are checked during recovery.
 Inspection binds the execution ID and executable digest, rejects contradictory or malformed
 records, and treats both incomplete launch states as requiring reconciliation. It never
 retries or kills a process, and a stored PID is not evidence of a currently running process.

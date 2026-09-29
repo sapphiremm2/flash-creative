@@ -69,7 +69,8 @@ public sealed class RuntimeExecutionJournalTests : IDisposable
     public async Task ContradictoryRecoveryRecordIsRejected(string state, int? pid, int? exit)
     {
         await RuntimeExecutionJournal.CreateAsync(Journal, execution, Hash);
-        await JsonFiles.WriteAsync(Path.Combine(Journal, "runtime.json"), new RuntimeExecutionRecord(1, execution, Hash, state, pid, DateTimeOffset.UtcNow, exit));
+        await File.WriteAllTextAsync(Path.Combine(Journal, "runtime.jsonl"),
+            System.Text.Json.JsonSerializer.Serialize(new RuntimeExecutionRecord(2, execution, Hash, state, pid, DateTimeOffset.UtcNow, exit)) + "\n");
         await Assert.ThrowsAsync<InvalidDataException>(() => RuntimeExecutionJournal.InspectAsync(Journal, execution, Hash));
     }
 
@@ -91,7 +92,7 @@ public sealed class RuntimeExecutionJournalTests : IDisposable
     public async Task MalformedJournalCannotAuthorizeLaunch(string corruption)
     {
         await RuntimeExecutionJournal.CreateAsync(Journal, execution, Hash);
-        var path = Path.Combine(Journal, "runtime.json");
+        var path = Path.Combine(Journal, "runtime.jsonl");
         var json = await File.ReadAllTextAsync(path);
         json = corruption switch
         {
@@ -104,6 +105,38 @@ public sealed class RuntimeExecutionJournalTests : IDisposable
             await Assert.ThrowsAsync<System.Text.Json.JsonException>(() => RuntimeExecutionJournal.InspectAsync(Journal, execution, Hash));
         else
             await Assert.ThrowsAsync<InvalidDataException>(() => RuntimeExecutionJournal.InspectAsync(Journal, execution, Hash));
+    }
+
+    [Theory]
+    [InlineData("partial")]
+    [InlineData("missing-newline")]
+    [InlineData("duplicate-state")]
+    public async Task DamagedTailNeverFallsBackToPrepared(string damage)
+    {
+        await RuntimeExecutionJournal.CreateAsync(Journal, execution, Hash);
+        var path = Path.Combine(Journal, "runtime.jsonl");
+        var prepared = await File.ReadAllTextAsync(path);
+        if (damage == "duplicate-state") await File.AppendAllTextAsync(path, prepared);
+        else
+        {
+            await RuntimeExecutionJournal.RecordLaunchIntentAsync(Journal, execution, Hash);
+            var complete = await File.ReadAllTextAsync(path);
+            await File.WriteAllTextAsync(path, damage == "partial" ? complete[..(prepared.Length + 10)] : complete[..^1]);
+        }
+        await Assert.ThrowsAsync<InvalidDataException>(() => RuntimeExecutionJournal.InspectAsync(Journal, execution, Hash));
+        await Assert.ThrowsAsync<InvalidDataException>(() => RuntimeExecutionJournal.RecordLaunchIntentAsync(Journal, execution, Hash));
+    }
+
+    [Fact]
+    public async Task CompletedRecordCannotChangeRecordedProcessIdentity()
+    {
+        await RuntimeExecutionJournal.CreateAsync(Journal, execution, Hash);
+        await RuntimeExecutionJournal.RecordLaunchIntentAsync(Journal, execution, Hash);
+        var started = DateTimeOffset.UtcNow;
+        await RuntimeExecutionJournal.RecordProcessAsync(Journal, execution, Hash, 123, started);
+        await File.AppendAllTextAsync(Path.Combine(Journal, "runtime.jsonl"),
+            System.Text.Json.JsonSerializer.Serialize(new RuntimeExecutionRecord(2, execution, Hash, "Completed", 456, started, 0)) + "\n");
+        await Assert.ThrowsAsync<InvalidDataException>(() => RuntimeExecutionJournal.InspectAsync(Journal, execution, Hash));
     }
 
     public void Dispose() => Directory.Delete(root, recursive: true);
