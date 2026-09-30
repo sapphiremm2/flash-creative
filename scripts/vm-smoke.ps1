@@ -59,6 +59,8 @@ $environment | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $ou
 
 & $cli --help > (Join-Path $output 'cli-help.txt')
 if ($LASTEXITCODE -ne 0) { throw 'Published CLI could not start in the guest.' }
+& $cli host-info > (Join-Path $output 'host-info.json')
+if ($LASTEXITCODE -ne 0) { throw 'Guest CPU and architecture diagnostics failed.' }
 & $cli prepare-runtime --plan (Join-Path $payload 'inputs\runtime-plan.json') `
     --archive (Join-Path $payload 'inputs\VCRedist14-64.zip') `
     --destination (Join-Path $output 'prepared-runtime') `

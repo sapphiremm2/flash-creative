@@ -28,6 +28,12 @@ dotnet run --project $cli -c Release --no-build -- --help
 The initial implementation uses the locally installed SDK. Upgrade the release
 target before distribution as tracked in the five-phase roadmap.
 
+`dotnet run --project $cli -c Release --no-build -- host-info` reports the current
+Windows/OS version, OS and process architectures, logical processor count, .NET version,
+and AVX2 availability to the running process. This distinguishes native execution from
+emulation and helps diagnose VM requirements. It does not check graphics, available
+storage, dependencies, or Adobe licensing and is not a complete compatibility decision.
+
 ## Find a product and inspect its packages
 
 ```powershell

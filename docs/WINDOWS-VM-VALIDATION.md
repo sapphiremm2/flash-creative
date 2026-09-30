@@ -65,6 +65,8 @@ can report Secure Boot and TPM state.
 
 The script captures OS/hardware evidence, existing VC runtime registry values in both
 views, hashes of the CLI/core/script, CLI startup, and `prepare-runtime` results.
+It also captures `host-info` from the self-contained CLI, including the guest OS/process
+architectures and AVX2 availability as seen by .NET.
 Preparation re-fetches Adobe verification metadata and checks the Windows signature
 and expected Microsoft publisher. A successful preparation is **not** installer
 execution or Adobe application validation. Copy results back to a local evidence

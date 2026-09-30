@@ -10,6 +10,7 @@ static async Task<int> RunAsync(string[] args)
     {
         Console.WriteLine("""
             Flash Creative â€” Windows CLI (installation development)
+            host-info
             catalog [--product KBRG] [--platform win64] [--channel ccm] [--json]
             manifest --product KBRG --version 16.0.7.36 [--locale en_US] [--out manifest.json]
             download --product CODE --version EXACT --package NAME --out DIRECTORY
@@ -47,6 +48,12 @@ static async Task<int> RunAsync(string[] args)
     try
     {
         var command = args[0];
+        if (command == "host-info")
+        {
+            if (args.Length != 1) throw new ArgumentException("host-info takes no options.");
+            Console.WriteLine(JsonSerializer.Serialize(WindowsHostInformation.Capture(), JsonFiles.Options));
+            return 0;
+        }
         if (command is not ("catalog" or "manifest" or "download" or "plan" or "queue-create" or "queue-run" or "queue-status" or "queue-audit" or "verify-signature" or "inspect-delta" or "stage-delta" or "inspect-install" or "plan-install" or "stage-install" or "prepare-runtime"))
             throw new ArgumentException("Unknown command; use --help.");
         var options = ParseOptions(args[1..]);
