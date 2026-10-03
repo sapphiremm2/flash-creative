@@ -22,6 +22,14 @@ if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) { throw 'Published CLI is
 $null = New-Item -ItemType Directory -Path $output
 
 $os = Get-CimInstance Win32_OperatingSystem
+function Read-OptionalDiagnostic([scriptblock]$Read) {
+    try { [ordered]@{ Available = $true; Value = (& $Read); Error = $null } }
+    catch { [ordered]@{ Available = $false; Value = $null; Error = $_.Exception.Message } }
+}
+$identityToken = [Security.Principal.WindowsIdentity]::GetCurrent()
+try {
+    $elevated = ([Security.Principal.WindowsPrincipal]::new($identityToken)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+} finally { $identityToken.Dispose() }
 $runtimeBaseline = foreach ($view in @('Registry64', 'Registry32')) {
     $hive = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::$view)
     try {
@@ -45,8 +53,9 @@ $environment = [ordered]@{
     Windows = $os.Caption
     Version = $os.Version
     Architecture = $os.OSArchitecture
-    SecureBoot = Confirm-SecureBootUEFI
-    TpmPresent = (Get-Tpm).TpmPresent
+    Elevated = $elevated
+    SecureBoot = Read-OptionalDiagnostic { Confirm-SecureBootUEFI }
+    TpmPresent = Read-OptionalDiagnostic { (Get-Tpm).TpmPresent }
     CapturedUtc = [DateTime]::UtcNow.ToString('o')
     CliSha256 = (Get-FileHash -LiteralPath $cli -Algorithm SHA256).Hash
     CliAssemblySha256 = (Get-FileHash -LiteralPath (Join-Path $payload 'cli\AdobeDownloader.Cli.dll') -Algorithm SHA256).Hash

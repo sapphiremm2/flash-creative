@@ -360,3 +360,59 @@ An untracked local continuation script waits for guest setup and Guest Additions
 finish before taking a powered-off clean snapshot, transferring the test payload, and
 collecting preparation smoke evidence. At this checkpoint Windows setup is still in
 progress; neither the snapshot nor guest smoke results are claimed complete.
+
+## VM readiness follow-up (2026-10-01)
+
+The `7cc5768` checkpoint adds process architecture and CPU diagnostics through
+`host-info`; all 347 tests passed locally and in native x64/ARM64 CI:
+https://github.com/sapphiremm2/flash-creative/actions/runs/36656388231.
+
+The initial guest stalled during its first login. The old local readiness worker
+timed out without suspending it. `scripts/wait-vm-ready.ps1` now supplies an explicit
+deadline and optional saved-state suspension, and the local continuation worker uses
+it. Fixture checks cover successful readiness, rejection of a stopped VM without
+mutation, and a stale Guest Additions property whose setup probe never succeeds:
+the latter times out, requests saving only the selected UUID, and reports failure.
+A separate failed-save fixture verifies that the error warns the VM may still be running.
+These are host-script checks, not guest smoke or Adobe application acceptance.
+See [VM recovery notes](WINDOWS-VM-VALIDATION.md#bounded-setup-readiness-and-recovery)
+for the guest-only CPU/paravirtualization experiments and their limitations.
+
+## First clean-guest preparation pass (2026-10-02/03)
+
+The Windows 11 Enterprise evaluation guest now has working Guest Additions and a
+powered-off `Clean-Windows-25H2` baseline snapshot. With the owner's approval, its
+VDI chain was moved to the internal SSD; configuration, snapshot metadata, media,
+credentials, and evidence remain on Toshiba. A VirtualBox management-service crash
+interrupted the full-directory move; the remaining base disk was moved separately
+and the registered parent/child chain checked before resuming.
+
+The October 2 preparation smoke passed from the restored baseline using the
+self-contained x64 CLI built at `7cc5768`. It reports Windows `10.0.26200.0`,
+x64 OS/process architecture, AVX2 available, and one logical processor. Fresh Adobe
+metadata verification, archive staging, and Windows publisher verification succeeded.
+The prepared executable's publisher is `Microsoft Corporation`, certificate thumbprint
+`3F56A45111684D454E231CFDC4DA5C8D370F9816`, with SHA-256:
+
+```text
+8995548DFFFCDE7C49987029C764355612BA6850EE09A7B6F0FDDC85BDC5C280
+```
+
+The unelevated smoke script now records unavailable Secure Boot/TPM reads explicitly
+instead of aborting preparation or treating missing permissions as disabled hardware.
+A separate, guest-only administrator diagnostic on October 3 confirmed Secure Boot
+enabled and TPM present, ready, enabled, and activated. This diagnostic did not launch
+an installer. Local evidence is under `D:\FlashCreative-VM\Evidence`, including
+`result.json`, `environment.json`, `host-info.json`, `runtime-preparation.json`, and
+`privileged-hardware.json`. The smoke script hash recorded by the guest is
+`88E51050CD9BDD22D3090B69C508CF69AC4B44FAE19CAB9B9104971F5EC0DF13`.
+
+The runtime baseline found none of the inspected VC14 runtime keys in either registry
+view. `InstallerExecuted` and `AdobeApplicationValidated` remain false. The verification
+lease ends with the preparation command; later execution must verify again.
+
+Four virtual CPUs reached readiness once but subsequent boots stalled. Restoring the
+baseline and using one CPU with the legacy provider allowed the smoke run to complete.
+This diagnostic configuration does not establish Windows/Adobe hardware compatibility.
+Multicore VM reliability, graphics requirements, authenticated privileged execution,
+runtime launch/recovery, and full Adobe installation/launch/uninstall remain open.
